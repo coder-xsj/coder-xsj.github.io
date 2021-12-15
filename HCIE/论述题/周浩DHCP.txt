@@ -1,0 +1,181 @@
+﻿一、在企业网络中有部分客户反映无法获取到IP地址，存在大量ARP表项翻动，网络中还存在部分终端IP地址为169.254.x.x，请分析可能原因，
+定位并提出解决方案。
+根据上述故障进行判断，初步判断网络中可能存在ARP攻击或者DHCP攻击的情况，现就可能原因、排障思路和排障方案分析如下（逐步排查）
+
+一：ARP欺骗攻击导致ARP表项翻动
+ARP欺骗攻击主要针对网关设备的ARP表项和终端设备ARP表项两个层面来分析并定位故障。
+1、网关设备的ARP表项翻动
+由于网络中部分终端无法访问网关，在网关设备上通过dispaly ARP all观察表项，发现ARP表项翻动的情况，可以判断存在ARP欺骗攻击伪造并修改ARP应答消息中相应字段，导致网关
+设备频繁重启，针对上诉故障，可以在网关设备上将故障终端的ARP表项配置为静态ARP表项，如果对应终端故障暂时消失，可以进一步部署相应技术保证网关设备的ARP安全，
+解决方案如下：
+（1）ARP表项固化
+使能ARP表项固化功能后，可以实现网关设备初次学习到ARP表项后，不再允许用户更新此ARP表项，或者通过发送单播ARP请求报文的方式对更新ARP条目的报文进行合法性确认。
+system-view                                                                                        //进入系统视图
+arp anti-attack entry-check  {fixed-mac| fixed-all | send-ack}enable     //配置ARP表项固化功能
+
+（2） ARP表项严格学习
+使能ARP表项严格学习之后，只有网关设备主动发送的ARP请求报文之后收到的应答报文才能触发本设备学习ARP,其他设备主动向本设备发送的ARP应答报文不能出发本地设备学习ARP
+
+ystem-view                                                                                                                          //进入系统视图
+ interface   G0/X/X                                                                                                           //进入接口视图
+arp learning  strict    {force-enable | force-disable | trust }                                                                    //配置ARP表项严格学习功能
+
+2、终端设备的ARP表项翻动
+如果终端设备学习到网关设备的ARP信息为错误信息，也会导致终端设备无法访问网关，可以在终端设备上通过ARP -a观察ARP记录，判断终端学习到的网关IP地址和MAC地址信息是
+否正确，如果错误则说明存在针对网关设备的ARP欺骗攻击。
+针对网关ARP欺骗攻击的解决方案如下：
+（1）ARP防网关冲突
+开启ARP防网关冲突之后，网关设备将生成ARP防攻击表项，并在后续一段时间内丢弃伪造的ARP报文，从而防止与网关地址冲突的ARP报文在VLAN广播内，避免终端学习到错误的ARP
+信息。
+system-view                                                                                //进入系统视图                                                       
+arp anti-attack gateway-duplicate enable                                   //使能ARP防我那个管冲突攻击功能
+
+（2）网关设备发送免费ARP
+使能网关设备周期发送免费ARP（VRRP场景默认开启）刷新终端设备的ARP记录，避免终端学习到错误的ARP信息
+system-view                                                                                //进入系统视图   
+interface   G0/X/X                                                                       //进入接口视图
+arp gratuitous-arp send enable                                                   //使能发送免费ARP报文的功能
+
+除上述故障排除方案外，考虑到网络中存在DHCP服务器，在接入交换机部署DHCP Snooping的情况系也可以通过DAI ARP检测来避免ARP欺骗攻击
+   system-view  //进入系统试图
+    int g0/0/x       //进入接口视图
+  arp anti-attack check user-bind enable   //使能动态ARP检测功能
+
+
+二、ARP泛洪攻击导致无法通信
+排查完ARP欺骗攻击并且进行相应的加固方案后，需要进一步考虑ARP泛洪攻击导致上述故障的可能，可以在网关设备上通过dis cpu-defend statistics packet-type /arp-reply all
+命令观察是否存在大量ARP报文丢弃，如果存在则可能存在ARP泛洪攻击。
+针对ARP泛洪攻击解决方案如下：
+（1）ARP报文限速
+通过限速功能，可以防止网关设备因处理大量ARP报文，导致CPU负担较高而无法获取正常报文。
+ system-view                                                             //进入系统试图
+arp speed-limit source-ip maximum                         //配置根据任意源IP地址进行ARP报文限速的限速值
+
+（2）ARP表项限制
+ARP表项存在规格限制，如果ARP表项得泛洪攻击可能导致表项空间耗尽，合法用户无法正常学习ARP表项，可以通过限制相应接口上的ARP表项条目数避免上述攻击。
+ystem-view                                                                                                                          //进入系统视图
+ interface   G0/X/X                                                                                                           //进入接口视图
+arp learning  strict    {force-enable | force-disable | trust }                                                                    //配置ARP表项严格学习功能
+
+另外针对ARP欺骗攻击和泛洪攻击进行相应的终端还可以实行其他安全加固，比如安装相应的杀毒软件，可以较大程度的降低ARP攻击的风险。
+
+
+三、DHCP攻击导致客户端无法学习到IP地址
+如通过以上解决方案排除ARP攻击的故障之后，网络中仍然无法正常获取到IP地址，则可能存在DHCP攻击的情况，我们将从以下几个方面考虑DHCP攻击导致终端无法获取地址的
+情况，并给出相应排障方案，分析如下：
+
+1、DHCP 饿死攻击，导致IP地址被耗尽
+攻击原理：攻击者仿真大量合法用户不断的发送DHCP discovery 报文申请IP地址，直到耗尽DHCP Server地址池中的地址为止，导致其他用户无法正常获得地址。
+解决方案：可以在交换机上配置端口安全限制限制端口学习的MAC地址数量，从而达到同一个端口限制接入用户数量的目的。
+system-view                                                                                            //进入系统试图
+dhcp enable                                                                                          //开启DHCP服务
+dhcp snooping enable 	                                                           //使能DHCP功能
+  dhcp snooping max-user-number  xx                                              //xx为dhcp snooping绑定表项得最大个数
+
+2、改变CHDDR值的饿死攻导致IP地址池被耗尽
+攻击原理：攻击者改变DHCP报文中的CHADDR值来不断申请IP地址，而交换机仅根据数据帧头部的源MAC来判断该报文是否合法，所以仅配置端口安全
+限制MAC地址学习数量的方案则不起作用。
+解决方案：通过开启DHCP snooping检查DHCP request报文中的chaddr字段功能解决问题，
+交换机端口开启该功能后会续检查上送的DHCP Request报文 中的帧头MAC地址是否与CHADDR值相等，相等则转发，否则丢弃
+
+system-view                                                                           //进入系统试图
+dhcp enable                                                                         //开启DHCP服务
+dhcp snooping enable 	                                        //使能DHCP功
+  dhcp snooping max-user-number  xx                         //xx为dhcp snooping绑定表项得最大个数
+ dhcp snooping check mac-address enable                  //使能Request报文帧头MAC地址与DHCP数据区中CHADDR字段是否相同的功能
+
+3、DDOS攻击造成DHCP服务器拒绝服务
+攻击原理：在DHCP网络中，攻击者在短时间内大量发送DHCP报文，导致DHCP服务器CPU一直处于高使用率，无法为其他客户端
+发送DHCP报文，导致拒绝服务无法分配IP地址。
+解决方案：为有效防止DHCP报文泛洪攻击，在交换机开启DHCP Snooping 功能后可以同时开启针对DHCP客户端报文限速
+功能。限制DHCP客户端报文的发送速率，转发在指定速率内的DHCP客户端报文给DHCP服务器，超出速率的报文则丢弃。保证DHCP服务器的
+处理能力。
+
+system-view                                                               //进入系统试图
+dhcp enable                                                             //开启DHCP服务
+dhcp snooping enable 	                             //使能DHCP功
+ dhcp snooping max-user-number  xx                  //xx为dhcp snooping绑定表项得最大个数
+
+4、DHCP Server仿冒者攻击
+攻击原理：由于DHCP Server和DHCP client没有认证机制，如果在网络中随意添加一台服务器，它就可以为客户端随意分配
+IP地址及网络参数，如果分配到了错误的IP地址和网络参数，将会对网络造成非常大的危害。
+解决方案：为防止DHCP server仿冒者攻击，可配置设备接口的“信任”/非信任（untrusted)"工作模式，将与合法DHCP服务器直接或间接连接的接口
+设置为信任接口，其他接口设置为非信任接口。此后，从非信任接口上收到的DHCP报文直接丢弃，可以有效防止DHCP Server仿冒者的攻击。
+   system-view                                                         //进入系统试图
+    int g0/0/x                                                          //进入接口视图
+   dhcp snooping enable 	                        //使能DHCP功能
+   dhcp snooping trusted                                  //配置接口为信任接口
+
+
+
+二、此园区网需要防止非法有线接入，请提供可行性方案
+考虑到上述园区网拓扑设计和业务类型，针对该园区网络的非法接入，主要从以下几个角度进行防范。
+（1）在接入层交换机开启MAC地址安全及端口安全技术，限制接入PC数量的合法性。
+接入交换及从MAC地址表层面，针对部分固定MAC地址的攻击可以通过配置黑洞MAC地址条目来实现安全防护，另外配置端口安全
+然后通过sticky方式新程MAC地址条目，限制接口学习到的MAC地址条目数及保护新闻给，可一定程度上防止非法客户端的接入。
+ system-view                                                               //进入系统试图
+mac-address blackhole (MAC地址 ) vlan vlan-id           //添加黑洞MAC表项
+    int g0/0/x                                                             //进入接口视图
+    port-security enable                                         //使能端口安全功能
+  port-security mac-address sticky                         //使能接口sticky mac功能
+  port-security max-mac-num   xxx                      //配置学习接口sticky mac限制数量
+
+（2）开启DAI动态ARP检测，防止中间中间人欺骗攻击
+针对非法客户端接入可能会造成ARP欺骗攻击，在开启DHCP snooping功能后可以形成（MAC、源 IP  接口 vlan）的信息绑定表项，开启DAI
+动态ARP检测，借助形成的DHCP snooping绑定表项完成对ARP消息的合法行检测，从而防止中间人欺骗攻击。
+system-view                            //进入系统试图
+dhcp enable                           //开启DHCP服务
+dhcp snooping enable 	//使能DHCP功能
+VLAN   X                                 //X为VLAN id，进入VLAN视图
+arp anti-attack check user-bind check-item { ip-address | mac-address | interface }*   //配置对ARP报文进行绑定表匹配的检查项
+
+3、IPSG IP源防护
+针对非法客户端接入后造成的IP地址欺骗攻击，也可以在开启DHCP Snooping功能之后利用DHCP snooping绑定表项进行IP报文的
+的合法性检测，防止非客户端修改静态IP地址，进行IP欺骗等攻击行为，针对部分手工分配IP地址的打印机或者客户端可以手工
+创建静态用户绑定表项，从而通过IPSG的检测
+
+system-view                            //进入系统试图
+dhcp enable                           //开启DHCP服务
+dhcp snooping enable 	//使能DHCP功能
+dhcp snooping trust                 //配置该接口为信任状态
+int g0/0/x   
+dhcp snooping trust                 //配置该接口为信任状态
+ip source check user-bind enable    //使能接口的IP报文检查功能
+ip source check user-bind check-item { ip-address | mac-address | vlan }   //配置IP报文检查项
+
+
+4、边缘端口配合保护机制
+非法客户端接入后如果伪造STP报文诸如TC BPDU报文会导致整个交换网络因为拓扑变更而产生真诚，此时可以通过部署边缘端口
+解决上述问题，并加速接口收敛，有效防止端口状态迁移触发拓扑变更，配置BGDP保护可以防范针对STP的恶意攻击。
+
+system-view                              //进入系统试图
+stp edged-port enable              //开启边缘端口属性
+ stp bpdu-protection          //收到bpdu报文会自动shutdown
+
+
+5、可以使用Mux-vlan技术，对企业用户和访客用户，以及互联网划分到不同的vlan，保证企业用户网络的安全。
+system-view                      //进入系统视图
+vlan   xx                           //进入VLAN 视图
+subordinate group  XX     //配置互通型从VLAN
+subordinate separate XX  //配置隔离型从VLAN
+int G0/0/X                       //进入接口视图
+port mux-vlan enable    //使能接口MAXvlan功能
+
+6、在网络边缘出口，根据企业网络安全需求部署防火墙、IPS、Anti DDOS、WAF等设备，对网络流量进行清洗和检查。
+
+7、上述攻击防范可以在一定程度上避免非法接入者带来的攻击，但是无法彻底阻断非法接入，可以通过在接入交换机上部署
+NAC网络准入控制来拒绝非法接入，从而实现网络安全。
+该园区网络场景我们主要通过802.1X认证进行终端接入控制，终端安装802.1X软件后，用户接入网络交换机发起认证申请，接入交换机
+和用户终端交互信息后，把用户信息发送到认证服务器进行认证，认证成功将相应接口作为授权接口。
+针对打印机等无法安装802.1X客户端的设备，采用MAC地址认证，接入交换机把打印机的MAC地址和密码上送到服务器进行认证，
+认证成功后相应的打印机设备可以访问网络。
+
+
+
+
+
+
+
+
+
+
