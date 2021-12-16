@@ -6,7 +6,7 @@
 - [5.ISIS 和 BFD 联动](HCIE/论述题/5.ISIS%20和%20BFD%20联动)
 - [6.BGP 邻居故障及选路](HCIE/论述题/6.BGP%20邻居故障及选路)
 - [9.RR 反射器(选型)](HCIE/论述题/9.RR%20反射器(选型))
-- [11.MPLS VPN RT 规划](HCIE/论述题/11.MPLS%20VPN%20RT%20规划) --- 暂时无法上传
+- [11.mpls 规划](HCIE/论述题/11.mpls) --- 暂时无法上传
 - [17.oE](HCIE/论述题/17.p) --- 暂时无法上传
 - [18.Acl 和 IP-Prefix 区别 ](HCIE/论述题/18.Acl和IP-Prefix区别)
 
