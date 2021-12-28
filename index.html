@@ -8,6 +8,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
 <!--  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">-->
   <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify/themes/vue.css">
+  <!-- 引入 gitalk留言功能 -->
+  <!-- <link rel="stylesheet" href="//unpkg.com/gitalk/dist/gitalk.css"> -->
 <!--  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify/themes/buble.css">-->
 <!--  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify/themes/dark.css">-->
 <!--  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify/themes/pure.css">-->
@@ -53,6 +55,19 @@
           }
       }
   </script>
+
+<script src="//unpkg.com/gitalk/dist/gitalk.min.js"></script>
+<script src="//unpkg.com/docsify/lib/plugins/gitalk.min.js"></script>
+<!-- <script>
+  const gitalk = new Gitalk({
+    clientID: 'XXXXXXXXXXXXXXXXXXXX',
+    clientSecret: 'XXXXXXXXXXXXXXXX',
+    repo: 'XXXXXXXXXXXXXX', // 存放评论的仓库
+    owner: 'XXXXX', // 仓库的创建者
+    admin: ['XXXXX'], // 如果仓库有多个人可以操作，那么在这里以数组形式写出
+    id: location.pathname, // 用于标记评论是哪个页面的
+  }) -->
+</script>
   <!-- Docsify v4 -->
 <!--  <script src="//cdn.jsdelivr.net/npm/docsify@4"></script>-->
   <script src="//cdn.jsdelivr.net/npm/docsify/lib/docsify.min.js"></script>
