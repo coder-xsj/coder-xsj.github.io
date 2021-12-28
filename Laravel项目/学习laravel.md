@@ -1091,33 +1091,64 @@ appsecret:30d51f25fc50b557f9f8d7cd545ffa80
 
 1. 获取授权码
 
-`https://open.weixin.qq.com/connect/oauth2/authorize?appid=wxd630d2f5f2250893&redirect_uri=http://larabbs.test&response_type=code&scope=snsapi_userinfo&state=STATE#wechat_redirect`
+```
+https://open.weixin.qq.com/connect/oauth2/authorize?appid=APPID&redirect_uri=REDIRECT_URI&response_type=code&scope=SCOPE&state=STATE#wechat_redirect
+```
 
-确认登录之后获取`code`
+数据
 
-`http://larabbs.test/?code=071tjvFa1XEPZA0eedHa1hsOAg4tjvFP&state=STATE`
+- APPID 测试账号中的 `appID`，填写自己账号的 `appID`
+- REDIRECT_URI 用户同意授权后的回调地址，填写 `http://larabbs.test`
+- SCOPE 应用授权作用域，填写 `snsapi_userinfo`
+- STATE 随机参数，可以不填，我们保持 `STATE` 即可。
+
+![image-20211217232703735](https://s2.loli.net/2021/12/17/xTjsqMNL69KDWSn.png)
+
+```
+https://open.weixin.qq.com/connect/oauth2/authorize?appid=wxd630d2f5f2250893&redirect_uri=http://larabbs.test&response_type=code&scope=snsapi_userinfo&state=STATE#wechat_redirect
+```
+
+确认登录之后返回地址
+
+```
+http://larabbs.test/?code=071tjvFa1XEPZA0eedHa1hsOAg4tjvFP&state=STATE
+```
+
+返回的地址就是上面地址填的 `&redirect_uri=http://larabbs.test` 的回调地址，还返回一个 `code`
 
 
 
 2. 请求以下链接获取 access_token：
 
-`https://api.weixin.qq.com/sns/oauth2/access_token?appid=wxd630d2f5f2250893&secret=30d51f25fc50b557f9f8d7cd545ffa80&code=071tjvFa1XEPZA0eedHa1hsOAg4tjvFP&grant_type=authorization_code`
+- code 上一步获取的 code
+
+```
+https://api.weixin.qq.com/sns/oauth2/access_token?appid=wxd630d2f5f2250893&secret=30d51f25fc50b557f9f8d7cd545ffa80&code=071tjvFa1XEPZA0eedHa1hsOAg4tjvFP&grant_type=authorization_code
+```
 
 返回
 
-~~~json
+```json
 {
-    "access_token": "44_m79tW-fKZcwJFmH7N3QbOJzKQwbMiL8tmYkOL398znX1LMT_i2O0YCCRFjR5qybMozhy196thpMO9SpfFjbloQ",
+    "access_token": "52_rjlWT7FluEijfrAEYRSpb6yDIFo0bCvWgNdvikbvtboiUgXUl7l_sQ_aun4GtOlrYOlWlcyAlyCPP_yBExvUaw",
     "expires_in": 7200,
-    "refresh_token": "44_vVrDLdV-zcQlewGC7zR-lzYpbkIVTMSxXy39mmhTBIUXoudTSPQcdIw0QQujsv8IRVnANE28wGtl26eZO6GY8A",
+    "refresh_token": "52_XGiu33OwG89ZFQEd_p3B-5MyHD-odxUhYEhgz-3qzwtKaHcrCkKpl7_aay7pqkddUpo9zOf9uJTyJl-a6x93_w",
     "openid": "ohLFo5n-FEnpmr3411uk21ntFb9c",
     "scope": "snsapi_userinfo"
 }
-~~~
+```
+
+
+
+![image-20211217232603958](https://s2.loli.net/2021/12/17/ihTDxMaFNR94LBz.png)
+
+
 
 3. 通过 `access_token` 和`openid`获取个人信息
 
-`https://api.weixin.qq.com/sns/userinfo?access_token=44_m79tW-fKZcwJFmH7N3QbOJzKQwbMiL8tmYkOL398znX1LMT_i2O0YCCRFjR5qybMozhy196thpMO9SpfFjbloQ&openid=ohLFo5n-FEnpmr3411uk21ntFb9c&lang=zh_CN`
+```
+https://api.weixin.qq.com/sns/userinfo?access_token=44_m79tW-fKZcwJFmH7N3QbOJzKQwbMiL8tmYkOL398znX1LMT_i2O0YCCRFjR5qybMozhy196thpMO9SpfFjbloQ&openid=ohLFo5n-FEnpmr3411uk21ntFb9c&lang=zh_CN
+```
 
 ~~~json
 {
@@ -1133,7 +1164,7 @@ appsecret:30d51f25fc50b557f9f8d7cd545ffa80
 }
 ~~~
 
-![image-20210507175029161](https://i.loli.net/2021/05/07/LHA8PYsnuxQiTEF.png)
+![image-20211217233156865](https://s2.loli.net/2021/12/17/RTeqVyOQ7aNYMLW.png)
 
 
 

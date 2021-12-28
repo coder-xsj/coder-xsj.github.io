@@ -10,7 +10,7 @@
 
 #### 1.1 链路聚合
 
-假设S1不支持LACP，S1和S2互连的接口需要捆绑成一个二层逻辑接口。逻辑接口成员根据源目的MAC进行负载分担。 
+假设SW1不支持LACP，SW1和SW2互连的接口需要捆绑成一个二层逻辑接口。逻辑接口成员根据源目的MAC进行负载分担。 
 
 解法：
 
@@ -55,7 +55,7 @@ Warning: All configurations of the interface will be cleared, and its state will
 
 #### 1.2 Link-type
 
-1. S1,S2,S3,S4互连接口的链路类型为Trunk，允许除VLAN1外的所有VLAN通过。（3） 
+1. SW1,SW2,SW3,SW4互连接口的链路类型为Trunk，允许除VLAN1外的所有VLAN通过。（3） 
 
 解法：
 
@@ -65,18 +65,18 @@ Warning: All configurations of the interface will be cleared, and its state will
 vlan batch 10 20
 interface GigabitEthernet0/0/9
 	port link-type trunk
-	undo port trunk allow-pass vlan 1
 	port trunk allow-pass vlan 2 to 4094
-
+	undo port trunk allow-pass vlan 1
+	
 interface GigabitEthernet0/0/10
 	port link-type trunk
-	undo port trunk allow-pass vlan 1
 	port trunk allow-pass vlan 2 to 4094
+	undo port trunk allow-pass vlan 1
 
 interface eth12
 	port link-type trunk
-	undo port trunk allow-pass vlan 1
 	port trunk allow-pass vlan 2 to 4094
+	undo port trunk allow-pass vlan 1
 ```
 
 注意：将SW3和SW4连接PC1、Server1的接口分别划分进对应VLAN
@@ -127,8 +127,8 @@ SW1、SW2
 ```sql
 int g0/0/2
 	port link-type trunk
-	undo port trunk allow-pass vlan 1
 	port trunk allow-pass vlan 2 to 4094
+	undo port trunk allow-pass vlan 1
 ```
 
 ##### 1. 配置单臂路由
@@ -218,7 +218,7 @@ int g0/0/2.20
 
 #### 1.3 MSTP（5分） 
 
-1. S1,S2,S3,S4都运行MSTP，VLAN10在instance10中，S1为 primary root，S2为 secondary root。VLAN20在instance20中，S1为  secondary root ，S2为primary root。
+1. SW1,SW2,SW3,SW4都运行MSTP，VLAN10在instance10中，S1为 primary root，S2为 secondary root。VLAN20在instance20中，S1为  secondary root ，S2为primary root。
 
 分析：
 
@@ -341,7 +341,7 @@ interface Serial0/0/1
 PE1
 
 ```
-ping 10.1.13.3
+ping 10.1.13.2
 ```
 
 ```sql
@@ -402,7 +402,7 @@ ping 10.3.33.1
 
 #### 2.1基础配置 
 
-#### 2.2 OSPF（6分） 
+#### 2.2 OSPF（6分）
 
 1. CE1和CE2之间的链路，及该两台设备的Loopback0，通告入OSPF区域。（已配） 
 2. CE1的Ge0/0/2.10和Ge0/0/2.20，CE2的Ge0/0/2.10和Ge0/0/2.20：直接网段通告入OSPF区域0，但这些接口不能转发OSPF报文（2） 
@@ -1229,7 +1229,7 @@ RR1
 
 ```sql
 bgp 100
-	ipv4-family vpnv4
+	ipv4-family vpnv4pp
   	policy vpn-target
   	peer 172.16.1.1 enable
   	peer 172.16.1.1 reflect-client
