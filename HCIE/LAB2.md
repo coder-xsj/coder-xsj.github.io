@@ -139,14 +139,14 @@ disp bgp peer
 
 ##### 2. 注意： ASBR 将路由传递给 RR 的时候必须配置下一跳本地
 
-ASBR1、ASBR3 配置
+ASBR1、ASBR2 配置
 
 ```sql
 bgp 100
 	peer 172.16.1.3 next-hop-local
 ```
 
-ASBR2、ASBR4 配置
+ASBR3、ASBR4 配置
 
 ```sql
 bgp 200
