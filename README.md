@@ -7,6 +7,7 @@
 - [5.ISIS 和 BFD 联动](HCIE/论述题/5.ISIS%20和%20BFD%20联动)
 - [6.BGP 邻居故障及选路](HCIE/论述题/6.BGP%20邻居故障及选路)
 - [7.BGP 黑洞](HCIE/论述题/7.BGP黑洞)
+- [8.8.OSPF 和 BGP 组网](HCIE/论述题/8.OSPF%20和%20BGP%20组网)
 - [9.RR 反射器(选型)](HCIE/论述题/9.RR%20反射器(选型))
 - [11.MPLS VPN RT 规划](HCIE/论述题/11.MPLS%20VPN%20RT%20规划)
 - [13.组播目的地址的处理](HCIE/论述题/13.组播目的地址的处理)
@@ -14,6 +15,8 @@
 - [16.QoS](HCIE/论述题/16.QoS)
 - [17.PPP](HCIE/论述题/17.PPP)
 - [18.Acl 和 IP-Prefix 区别 ](HCIE/论述题/18.Acl和IP-Prefix区别)
+- [20.IGMP Snooping](HCIE/论述题/20.IGMP Snooping)
+
 
 #### [lab adn TS]
 
