@@ -1091,6 +1091,8 @@ ospf 10 vpn-instance VPN1
 
 `MCE` 需关闭 `DN` 位
 
+MCE 配置
+
 ```sql
 ospf 10 vpn-instance VPN1
 	vpn-instance-capability simple
@@ -1111,7 +1113,7 @@ ospf 10 vpn-instance VPN1
  10.3.34.1/32  Direct  0    0           D   127.0.0.1       GigabitEthernet0/0/1
 ```
 
-
+若此时 PE4 没有学习到 CE4 上路由，请检查 ospf 邻居关系， `disp ospf error`，大概率是 掩码不匹配，也就是 PE4 的接口掩码有问题。
 
 7. 在AS100，AS200内建立IBGP IPV4邻居关系，RR1是PE1,PE2,P1,ASBR1,ASBR2的反射器，RR2是PE3，PE4，P2，ASBR4的反射 器。ASBR1-ASBR3，ASBR2-ASBR4建立EBGP IPV4邻居关系。（已预配） 
 
@@ -1176,7 +1178,7 @@ bgp 200
 PE1、RR1 配置
 
 ```sql
-interface Ip-Trunk1q
+interface Ip-Trunk1
  mpls
  mpls ldp
 ```
@@ -1229,7 +1231,7 @@ RR1
 
 ```sql
 bgp 100
-	ipv4-family vpnv4pp
+	ipv4-family vpnv4p
   	policy vpn-target
   	peer 172.16.1.1 enable
   	peer 172.16.1.1 reflect-client
