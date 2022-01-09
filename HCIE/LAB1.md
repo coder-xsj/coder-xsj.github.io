@@ -65,17 +65,17 @@ Warning: All configurations of the interface will be cleared, and its state will
 vlan batch 10 20
 interface GigabitEthernet0/0/9
 	port link-type trunk
-	port trunk allow-pass vlan 2 to 4094
+	port trunk allow-pass vlan all
 	undo port trunk allow-pass vlan 1
 	
 interface GigabitEthernet0/0/10
 	port link-type trunk
-	port trunk allow-pass vlan 2 to 4094
+	port trunk allow-pass vlan all
 	undo port trunk allow-pass vlan 1
 
 interface eth12
 	port link-type trunk
-	port trunk allow-pass vlan 2 to 4094
+	port trunk allow-pass vlan all
 	undo port trunk allow-pass vlan 1
 ```
 
@@ -127,7 +127,7 @@ SW1、SW2
 ```sql
 int g0/0/2
 	port link-type trunk
-	port trunk allow-pass vlan 2 to 4094
+	port trunk allow-pass all
 	undo port trunk allow-pass vlan 1
 ```
 
@@ -503,7 +503,7 @@ Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
 
 ```
 interface Ip-Trunk1 
-	isis enable 1
+	isis enable
 ```
 检查： disp isis peer
 ```sql
@@ -519,7 +519,7 @@ int g0/0/0
 	isis circuit-type p2p
 ```
 
-`disp isis int g0/0/0 verbose `
+`disp isis int g0/0/0 verbose | include p2p `
 
 3. 在RR2，P2上，ISIS和OSPF双向引入前缀为172.16.0.0/16的主机路由，被引入协议的cost要继承到后引入的协议中，P2和PE4的loopback0互访 走最优路径。配置要求有最好的扩展性。（8） 
 
@@ -535,9 +535,9 @@ RR2
 
 ```sql
 ospf
-	import-route isis 1
+	import-route isis
 isis
-	import-route ospf 1
+	import-route ospf
 ```
 
 [P2]tracert -a 172.16.1.10 172.16.1.2 发现流量在P2和RR2之间出现环路 
@@ -569,7 +569,7 @@ RR2、P2
 route-policy PRE permit node 10 
 	if-match tag 172 
 	apply preference 14  
-ospf 1  
+ospf
 	preference ase route-policy PRE
 ```
 
@@ -747,16 +747,16 @@ Route-policy : I2O
 RR2、P2 
 
 ~~~sql
-ospf 1 
+ospf
  default cost inherit-metric
  import-route isis route-policy I2O type 1
-isis 1
- import-route ospf 1 inherit-cost route-policy O2I 
+isis
+ import-route ospf inherit-cost route-policy O2I 
 ~~~
 
 验证
 
-<img src="C:/Users/XuShengjin/AppData/Roaming/Typora/typora-user-images/image-20210922202548556.png" alt="image-20210922202548556" style="zoom:50%;" />
+<img src="https://s2.loli.net/2022/01/09/d9B3SLCsAZX28Ra.png" alt="image-20210922202548556" style="zoom:50%;" />
 
 PE4 --- ASBR3 的 cost 值  `172.16.1.2/32`
 
