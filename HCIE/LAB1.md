@@ -1231,7 +1231,7 @@ RR1
 
 ```sql
 bgp 100
-	ipv4-family vpnv4p
+	ipv4-family vpnv4
   	policy vpn-target
   	peer 172.16.1.1 enable
   	peer 172.16.1.1 reflect-client
@@ -1590,6 +1590,39 @@ RR1 也收到了对端的路由了
  *>i    172.16.1.11       172.16.1.5        NULL/1037
 ```
 
+PE1
+
+```sql
+[PE1]disp bgp routing-table label 
+ Total Number of Routes: 6
+        Network           NextHop           In/Out Label
+
+   i    172.16.1.2        172.16.1.6        NULL/1041
+   i    172.16.1.7        172.16.1.5        NULL/1040
+   i    172.16.1.8        172.16.1.6        NULL/1037
+   i    172.16.1.9        172.16.1.5        NULL/1042
+   i    172.16.1.10       172.16.1.6        NULL/1039
+   i    172.16.1.11       172.16.1.5        NULL/1044
+```
+
+PE2
+
+```sql
+[PE2]disp bgp routing-table label 
+ Total Number of Routes: 6
+        Network           NextHop           In/Out Label
+
+   i    172.16.1.2        172.16.1.6        NULL/1041
+   i    172.16.1.7        172.16.1.5        NULL/1040
+   i    172.16.1.8        172.16.1.6        NULL/1037
+   i    172.16.1.9        172.16.1.5        NULL/1042
+   i    172.16.1.10       172.16.1.6        NULL/1039
+   i    172.16.1.11       172.16.1.5        NULL/1044
+```
+
+发现路由为 `i` 不是最优路由。
+
+
 > D. AS100 中因为存在 Level-1 设备没有办法学习到 ASBR1、ASBR2 的明细路由，导致 BGP 标签路由无效，需要配置路由泄露 
 >
 
@@ -1626,8 +1659,6 @@ isis 1
     Request time out
     Request time out
 ```
-
-
 
 > E. 实现 Hub-Spoke 路由正确学习，配置允许 AS 号重复
 >
@@ -1710,7 +1741,7 @@ tracert -a 172.17.1.4 172.17.1.2
 
 MPLS-VPN 传递路由 EBGP 传递给 IBGP 时候会自动更改下一跳，所以额外需要配置下一跳不变
 
-![image-20211004172149046](https://i.loli.net/2021/10/04/pzb1uAfWgr8J2BF.png)
+![image-20220109165734511](https://s2.loli.net/2022/01/09/wGOJSrU5E4DjtLx.png)
 
 RR1 配置
 
@@ -1866,7 +1897,17 @@ CE1、CE2
 ```sql
 bgp 65000
 	preference 120 255 255
-						EBGP IBGP LOCAL
+					# EBGP IBGP LOCAL
+```
+
+此处为什么将 EBGP 优先级设置为 120，是因为需要比 O_ASE 优先级 150 低就行了。
+
+```sql
+[CE1]disp ip routing-table 172.17.1.3
+------------------------------------------------------------------------------
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+     172.17.1.3/32  O_ASE   150  1           D   10.2.12.2       GigabitEthernet
+0/0/0
 ```
 
 验证：
@@ -1923,8 +1964,8 @@ acl 2002
 > 2. 再用 ip-prefix 匹配出 PE1、PE2
 
 ```sql
-ip ip-prefix PE1 index 10 permit 172.16.1.1 32
-ip ip-prefix PE2 index 10 permit 172.16.1.20 32
+ip ip-prefix PE1 permit 172.16.1.1 32
+ip ip-prefix PE2 permit 172.16.1.20 32
 ```
 
 > 3. 通过 route-policy 修改 local-preference
@@ -1949,12 +1990,12 @@ bgp 200
  		peer 172.16.1.9 route-policy LP import
 ```
 
-
+供整体复制：
 
 
 ```sql
-ip ip-prefix PE1 index 10 permit 172.16.1.1 32
-ip ip-prefix PE2 index 10 permit 172.16.1.20 32
+ip ip-prefix PE1 permit 172.16.1.1 32
+ip ip-prefix PE2 permit 172.16.1.20 32
 acl 2001 
 	rule 5 permit source 10.3.1.0 0.0.254.0 
 acl 2002 
@@ -2003,7 +2044,7 @@ bfd toisp bind peer-ip 100.0.1.2 interface GigabitEthernet2/0/0 one-arm-echo
 	commit
 ```
 
-验证：
+验证：已 `Up`
 
 ```sql
 [CE1]disp bfd session all
@@ -2044,14 +2085,13 @@ Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
 CE1
 
 ```sql
-bfp toisp
-	min-echo-rx-interval 40			# 因为故障次数为 3 次，3 * 40 = 120 ms
+bfd toisp
+	# 因为故障次数为 3 次，3 * 40 = 120 ms
+	min-echo-rx-interval 40			
 	commit
 ```
 
-
-
-2. CE2，CE3,CE4能够通过默认路由访问ISP（4） 
+2. CE2，CE3，CE4能够通过默认路由访问ISP（4） 
 
 **将默认路由通告给 CE2、CE3、CE4**
 
@@ -2124,6 +2164,13 @@ Route Flags: R - relay, D - download to fib
 ------------------------------------------------------------------------------
 Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
         0.0.0.0/0   O_ASE   150  1           D   10.3.34.1       GigabitEthernet0/0/1
+        
+<MCE4>disp ip rou vpn-instance VPN1 0.0.0.0
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+        0.0.0.0/0   O_ASE   150  1           D   10.3.34.1       GigabitEthernet
+0/0/1
 ```
 
 补充：
