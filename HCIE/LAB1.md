@@ -2242,7 +2242,7 @@ CE3
 因为在配置 `	nat outbound 2000 address-group 1 `的时候，会自动生成用户自定义的路由条目
 
 ```sql
-[CE1]disp ip routing
+[CE1]disp ip routing | include Unr
      102.0.1.1/32  Unr     64   0           D   127.0.0.1       InLoopBack0
      102.0.1.2/32  Unr     64   0           D   127.0.0.1       InLoopBack0
      102.0.1.3/32  Unr     64   0           D   127.0.0.1       InLoopBack0
@@ -2264,7 +2264,7 @@ CE1
 定义一个时间
 
 ```sql
- time-range W 08:00 to 18:00 working-day 
+time-range W 08:00 to 18:00 working-day 
 ```
 
 在用 `高级 acl` 匹配流量
@@ -2479,6 +2479,7 @@ int g0/0/2
 sy
 isis
 	ipv6 enable topology ipv6
+	quit
 ```
 
 以 PE1 为例配置
@@ -2498,7 +2499,7 @@ int LoopBack0
 
 ```sql
 disp isis int  # 看接口 ipv6 up
-disp ipv6 routing pro isis # 看到 D1 to D6 可以验证下 cost 值
+disp ipv6 routing pro isis # 看到 D1 to D6 可以验证下 cost 是否为 2520 2510
 ```
 
 
@@ -2513,7 +2514,8 @@ disp ipv6 routing pro isis # 看到 D1 to D6 可以验证下 cost 值
 
 ASBR1 配置
 
-先在 ASBR1、3 之间查看 `ipv6` 地址
+> 建议先在 ASBR1、3 之间查看 `ipv6` 地址，用于 BGP 建立邻居时候。
+>
 
 ```sql
 bgp 100
@@ -2575,13 +2577,13 @@ bgp 100
 # ASBR3 检查 EBGP4+
 disp bgp ipv6 peer
 # RR 检查 IBGP+  
-
+# RR1 上检查
 disp bgp ipv6 peer
 # 有 5 个邻居
 # 发现有 DC01 - DC06 就行
 ```
 
-
+若此时邻居关系无法建立，可能因为各个设备 `LoopBack0` 未开启 `isis ipv6 enable` 
 
 2. 在ASBR1将ISIS IPV6的路由导入BGP4+,只向ASBR3通告前缀为2000:EAD8:99EF:C03E:B2AD:9EFF:32DD:DC00/120的路由（不能使用route-policy）。 将ASBR3的loopback0通告入BGP4+（4） 
 
@@ -2608,7 +2610,7 @@ bgp 100
  Total Number of Routes: 13
 ```
 
-> B、只向ASBR3通告前缀为2000:EAD8:99EF:C03E:B2AD:9EFF:32DD:DC00/120的路由（不能使用route-policy）
+> B、只向ASBR3通告前缀为2000\:EAD8:99EF\:C03E\:B2AD\:9EFF\:32DD\:DC00/120的路由（不能使用route-policy）
 
 注意：`ipv6` 没有自动汇总，需手工配置 `aggregate`
 
@@ -2651,7 +2653,7 @@ PE1
 ```sql
 int g0/0/0
 	undo ipv6 address 2000:EAD8:99EF:C03E:B2AD:9EFF:32DD:DC20/127
-  ipv6 address 2012:: 127
+	ipv6 address 2012:: 127
 ```
 
 PE2
@@ -2659,7 +2661,7 @@ PE2
 ```sql
 int g0/0/0
 	undo ipv6 address 2000:EAD8:99EF:C03E:B2AD:9EFF:32DD:DC21/127
-  ipv6 address 2012::1 127
+	ipv6 address 2012::1 127
 ```
 
 此时 ASBR3 查看 就会多出 `2012::` 前缀的路由
@@ -2788,6 +2790,8 @@ isis
 解法：ASBR1 写一个 `ipv6 prefix` 把 `DC07` 匹配出来，在写一个 `route-policy` deny `DC07`，放行其它
 
 ​				然后汇总的时候调用 `suppress-policy` 完事了 
+
+ASBR1 配置
 
 A、写一个 `ipv6 prefix` 把 `DC07` 匹配出来
 
