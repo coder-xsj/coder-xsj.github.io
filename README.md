@@ -18,6 +18,7 @@
 - [16.QoS](HCIE/论述题/16.QoS)
 - [17.PPP](HCIE/论述题/17.PPP)
 - [18.Acl 和 IP-Prefix 区别 ](HCIE/论述题/18.Acl和IP-Prefix区别)
+- [19.RSTP](HCIE/论述题/19.RSTP)
 - [20.IGMP Snooping](HCIE/论述题/20.IGMP%20Snooping)
 
 
