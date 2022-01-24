@@ -1120,7 +1120,7 @@ ospf 10 vpn-instance VPN1
 ​	ASBR1 、ASBR2
 
 ```sql
-ip ip-prefix 172 index 10 permit 172.16.0.0 16 greater-equal 32 less-equal 32
+ip ip-prefix 172 permit 172.16.0.0 16 greater-equal 32 less-equal 32
 route-policy I2B permit node 10
 	if-match ip-prefix 172
 bgp 100
@@ -1130,7 +1130,7 @@ bgp 100
 ​	ASBR3 、 ASBR4
 
 ```sql
-ip ip-prefix 172 index 10 permit 172.16.0.0 16 greater-equal 32 less-equal 32
+ip ip-prefix 172 permit 172.16.0.0 16 greater-equal 32 less-equal 32
 route-policy I2B permit node 10
 	if-match ip-prefix 172
 bgp 200
@@ -1623,7 +1623,7 @@ PE2
 RR1 、P1配置 
 
 ```sql
-ip ip-prefix 172 index 10 permit 172.16.0.0 16 greater-equal 32 less-equal 32 
+ip ip-prefix 172 permit 172.16.0.0 16 greater-equal 32 less-equal 32 
 isis 1 
 	import-route isis level-2 into level-1 filter-policy ip-prefix 172
 ```

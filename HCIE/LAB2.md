@@ -13,15 +13,26 @@ IGP --- 有可能这题顺序不一样，有可能放在MPLS VPN，解法一致
 1. CE1,CE2为VPN1的Hub-CE，PE1,PE2为Hub-PE；CE3，CE4为VPN的spoke站点；PE3，PE4为SPOKE-PE
 2. CE4为Multi-VPN-instance CE1，CE4的VPN实例1，通过Ge0/0/1连接PE4。
 3. 合理设置VPN1参数，使得Spoke站点互访的流量必须经过Hub-CE设备。当CE1-PE1链路断开的情况下，PE1仍然可以学习到CE1的业务路
-由。（PE3上的VPN1的RD为100:13,EXPORT RT为100：1，import RT为200：1）（2）
+  由。（PE3上的VPN1的RD为100:13,EXPORT RT为100：1，import RT为200：1）（2）
 4. 如图4，CE1通过G0/0/1.1和G0/0/1.2建立直接EBGP邻居，接入PE1。CE1通过G0/0/1.2,向PE1通告BGP update中，某些路由信息的AS-path中
-有200。在CE1上，将OSPF路由导入BGP。（2）--------- `hub-spoke allow-as-loop （PE1、PE2 TOS , RR2 vpnv4）`
+  有200。在CE1上，将OSPF路由导入BGP。（2）--------- `hub-spoke allow-as-loop （PE1、PE2 TOS , RR2 vpnv4）`
 5. CE2通过G0/0/1.1和G0/0/1.2建立直接EBGP邻居，接入PE2。CE2通过G0/0/1.2,向PE2通告BGP update中，某些路由信息的AS-path中有200。
-在CE2上，将OSPF导入BGP。（2）
+  在CE2上，将OSPF导入BGP。（2）
 6. CE3通过OSPF区域1接入PE3，通过PE3-CE3的逻辑接口互通，通告CE3的各环回口；CE4通过OSPF区域0接入PE4，通过PE4-CE4的Ge0/0/1接口
-互通，通告CE4的各环回口；（2）
+  互通，通告CE4的各环回口；（2）
 7. 如图4在AS100，AS200内建立IBGP IPV4邻居关系，RR1是PE1,PE2,P1,ASBR1,ASBR2的反射器，RR2是PE3，PE4，P2，ASBR4的反射
-器。ASBR1-ASBR3，ASBR2-ASBR4建立EBGP IPV4邻居关系------------`LAB-2没有BGP预配`
+  器。ASBR1-ASBR3，ASBR2-ASBR4建立EBGP IPV4邻居关系------------`LAB-2没有BGP预配`
+
+8. 如图3，AS100，AS200内各网元配置MPLS LSR-ID， 全局使能MPLS , MPLS LDP（已配）AS100,AS200内各有直连链路建立LDP邻居（除PE1-RR1之间，其余已配）（1）-------------------------------------------------------------以上需求和LAB1一致，解法一致！！！！
+   分析：AS 100的ISIS部署存在路由泄露问题，需要手动将level 2的路由泄露进level 1
+9. ASBR1-ASBR3、ASBR2-ASBR4之间通过直连接口建立EBGP邻居关系。在ASBR上将ISIS的loopback0口引入BGP。
+   假设loopback0地址为172.16.1.Y/32，当Y为奇数时，对端设备访问本AS设备的loopback0优选的链路为ASBR1-ASBR3，
+   当Y为偶数时，对端设备访问本AS设备的loopback0优选的链路为ASBR2-ASBR4，保证配置具有最好的扩展性。（10分）
+
+10. 如图4，各站点，通过MPLS BGP VPN跨域OPTION C方案二，能够相互学习路由，MPLS域不能出现次优路径。（15）
+11. CE1-PE1之间链路开，CE1设备仍可以学习到spoke业务网段。配置保障有最好的扩展性。（6）
+12. 在拓扑正常情况下，要求CE1，CE2访问spoke网段时，不从本AS内绕行。（1）
+13. 在PE3，PE4上修改BGP local-preference属性，实现CE3,CE4访问非直接的10.3.x.0/24网段时，若X为奇数，PE3，PE4优选的下一跳为PE1；若X为偶数，PE3，PE4优选的下一跳为PE2，不用考虑来回路径是否一致。（3分）-------------------和LAB1一致！！！！！
 
 #### 1. 配置 4、7
 
@@ -405,6 +416,14 @@ route-policy I2B deny node 1
 2. 下一跳本地配置
 3. RR 和 P 是否进行 路由渗透
 
+RR1 、P1配置 
+
+```sql
+ip ip-prefix 172 permit 172.16.0.0 16 greater-equal 32 less-equal 32 
+isis 1 
+	import-route isis level-2 into level-1 filter-policy ip-prefix 172
+```
+
 ASBR1
 
 ```sql
@@ -616,6 +635,7 @@ RR1 上 disp bgp vpnv4 all peer
 RR2 配置
 
 ```sql
+bgp 200
 ipv4-family vpnv4
 	undo policy vpn-target
   peer 172.16.1.2 enable
@@ -643,7 +663,7 @@ bgp 200
 ipv4-family vpn-instance VPN1 
 	import-route ospf 10
 ipv4-family vpnv4
-  peer 172.16.1.9 enable
+    peer 172.16.1.9 enable
 ```
 
 此时就应该能学到本端的 vpnv4 路由了
@@ -655,8 +675,6 @@ ipv4-family vpnv4
   172.16.1.3      4         100       88       62     0 00:54:49 Established    34
   172.16.1.11     4         200       23       42     0 00:18:39 Established    3
 ```
-
-
 
 ##### E. RR 之间建立 MP-EBGP 多跳传递 vpnv4 路由
 
@@ -670,7 +688,6 @@ RR1
 bgp 100 
  ipv4-family vpnv4
 		peer 172.16.1.9 enable
-    peer 172.16.1.9 ebgp-max-hop 255
   	peer 172.16.1.9 next-hop-invariable
  ipv4-family unicast
   	undo peer 172.16.1.9 enable
@@ -682,7 +699,6 @@ RR2
 bgp 200
   ipv4-family vpnv4
 		peer 172.16.1.3 enable
-    peer 172.16.1.3 ebgp-max-hop 255 
     peer 172.16.1.3 next-hop-invariable 
     peer 172.16.1.3 allow-as-loop
   ipv4-family unicast
