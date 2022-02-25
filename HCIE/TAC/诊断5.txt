@@ -1,0 +1,240 @@
+一、故障根因
+
+AR31 的 IS-Level 配置错误，错误配置为 Level-1。
+
+二、故障分析
+
+2.1 故障重现
+
+首先在 AR34 通过 display ip routing-table protocol isis 查看路由表，验证故障现象，输出结果如下：
+
+<AR34>display ip routing-table protocol isis
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Public routing table : ISIS
+         Destinations : 5        Routes : 5        
+
+ISIS routing table status : <Active>
+         Destinations : 5        Routes : 5
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+        0.0.0.0/0   ISIS-L1 15   10          D   10.5.134.30     GigabitEthernet0/0/0
+      10.5.1.30/32  ISIS-L1 15   10          D   10.5.134.30     GigabitEthernet0/0/0
+      10.5.1.31/32  ISIS-L1 15   10          D   10.5.234.31     GigabitEthernet0/0/1
+     10.5.230.0/24  ISIS-L1 15   20          D   10.5.134.30     GigabitEthernet0/0/0
+     10.5.231.0/24  ISIS-L1 15   20          D   10.5.234.31     GigabitEthernet0/0/1
+
+ISIS routing table status : <Inactive>
+         Destinations : 0        Routes : 0
+
+由以上输出结果可知：AR34 上只有一条指向 AR30 的默认路由，故障真实发生，根据当前故障现象，自上而下分层分析故障原因。
+
+AR34 生成指向 AR31 的默认路由需要 AR31 生成 ATT 置位 1 的 Level-1 的 LSP，而 AR31 为 AR34 下发 ATT 置位 1 的 LSP 需要满足如下条件：
+
+（1）AR31 与 AR34 建立相同区域的 Level-1 邻居关系
+
+（2）AR31 与 AR28 建立不同区域的 Level-2 邻居关系
+
+2.2 检查 AR34 的 IS-IS 邻居关系
+
+在 AR34 上通过 display isis peer 命令，检查 IS-IS 邻居关系，判断是否满足上述条件（1）输出结果如下：
+
+<AR34>display isis peer 
+
+                          Peer information for ISIS(1)
+
+  System Id     Interface          Circuit Id       State HoldTime Type     PRI
+-------------------------------------------------------------------------------
+0000.0000.0030  GE0/0/0            0000.0000.0030.01 Up   8s       L1       64 
+0000.0000.0031  GE0/0/1            0000.0000.0031.01 Up   8s       L1       64 
+
+Total Peer(s): 2
+
+由以上输出结果可知：AR34 与 AR31 建立基于 49.0005 的 Level-1 邻居关系，进一步查看 AR34 链路状态太数据库。
+
+2.3 检查 AR34 的 IS-IS 链路状态数据库
+
+在 AR34 上通过 display isis lsdb 查看链路状态数据库，结果输出如下：
+
+<AR34>display isis lsdb 
+
+                        Database information for ISIS(1)
+                        --------------------------------
+
+                          Level-1 Link State Database
+
+LSPID                 Seq Num      Checksum      Holdtime      Length  ATT/P/OL
+-------------------------------------------------------------------------------
+0000.0000.0030.00-00  0x00000007   0xeae4        735           102     1/0/0   
+0000.0000.0030.01-00  0x00000001   0xdd1d        735           55      0/0/0   
+0000.0000.0031.00-00  0x00000005   0x11f9        738           102     0/0/0   	// AR31 未发送 ATT 置位的 LSP
+0000.0000.0031.01-00  0x00000001   0xe416        738           55      0/0/0   
+0000.0000.0034.00-00* 0x00000008   0x12e1        739           113     0/0/0   
+
+Total LSP(s): 5
+    *(In TLV)-Leaking Route, *(By LSPID)-Self LSP, +-Self LSP(Extended), 
+           ATT-Attached, P-Partition, OL-Overload
+
+由以上输出结果可知：AR34 收到 AR31 的 LSP 中 ATT 位并没有置位，所以 AR34 无法生成指向 AR31 的默认路由。
+
+由于 AR34 可以学习到 AR30 产生的 ATT 置位的 Level-1 的 LSP，初步排除 AR28 的 IS-IS 区域 ID 或者 Level 等级错误。
+
+2.4 检查 AR31 的 IS-IS 邻居关系
+
+在 AR31 上通过 display isis peer  查看 IS-IS 邻居关系，输出结果如下：
+
+<AR31>display isis peer 
+
+                          Peer information for ISIS(1)
+
+  System Id     Interface          Circuit Id       State HoldTime Type     PRI
+-------------------------------------------------------------------------------
+0000.0000.0034  GE0/0/1            0000.0000.0031.01 Up   24s      L1       64 
+
+Total Peer(s): 1
+
+由以上输出结果可知：AR31 并未与 AR28 建立 Level-2 邻居关系，不满足上述条件（2），造成邻居关系无法建立的原因有很多，首先检查相关接口是否开启 IS-IS。
+
+2.5 检查 AR31 相关接口是否开启 IS-IS
+
+在 AR31 上通过 display isis interface 命令检查相应接口是否开启 IS-IS 协议，输出结果如下：
+
+<AR31>display isis interface GigabitEthernet 0/0/2 
+
+                       Interface information for ISIS(1)
+                       ---------------------------------
+ Interface       Id      IPV4.State          IPV6.State      MTU  Type  DIS   
+ GE0/0/2         002         Up                 Down         1497 L1/L2 No/No 
+
+通过以上输出结果可知：AR31 的 GigabitEthernet 0/0/2 接口已经启用 IS-IS，需要进一步判断无法建立邻居关系的原因。
+
+2.6 检查两者直连接口网络层连通性
+
+<AR31>ping 10.5.231.28
+  PING 10.5.231.28: 56  data bytes, press CTRL_C to break
+    Reply from 10.5.231.28: bytes=56 Sequence=1 ttl=255 time=80 ms
+    Reply from 10.5.231.28: bytes=56 Sequence=2 ttl=255 time=20 ms
+    Reply from 10.5.231.28: bytes=56 Sequence=3 ttl=255 time=20 ms
+    Reply from 10.5.231.28: bytes=56 Sequence=4 ttl=255 time=20 ms
+    Reply from 10.5.231.28: bytes=56 Sequence=5 ttl=255 time=20 ms
+
+  --- 10.5.231.28 ping statistics ---
+    5 packet(s) transmitted
+    5 packet(s) received
+    0.00% packet loss
+    round-trip min/avg/max = 20/32/80 ms
+
+由以上输出结果可知：AR31 和 AR28 的接口正常互访，进一步检查 IS-IS 配置。
+
+2.7 检查 AR31 的 IS-IS 配置信息
+
+在 AR31 上通过 display isis brief 命令检查 AR31 的相关接口是否启用 IS-IS 并检查 IS-IS 配置，输出结果如下：
+
+<AR31>display isis brief 
+
+                     ISIS Protocol Information for ISIS(1)
+                     -------------------------------------
+SystemId: 0000.0000.0031      System Level: L1   	// AR31 配置为 Level-1 路由器 
+Area-Authentication-mode: NULL
+Domain-Authentication-mode: NULL
+Ipv6 is not enabled
+ISIS is in invalid restart status
+ISIS is in protocol hot standby state: Real-Time Backup
+
+Interface: 10.5.234.31(GE0/0/1)
+Cost: L1 10        L2 10                Ipv6 Cost: L1 10   L2 10   
+State: IPV4 Up                          IPV6 Down
+Type: BROADCAST                         MTU: 1497      
+Priority: L1 64   L2 64   
+Timers:     Csnp: L1 10    L2 10    ,Retransmit: L12 5   , Hello: L1 10 L2 10  ,
+ 
+Hello Multiplier: L1 3    L2 3     , LSP-Throttle Timer: L12 50  
+
+Interface: 10.5.231.31(GE0/0/2)
+Cost: L1 10        L2 10                Ipv6 Cost: L1 10   L2 10   
+State: IPV4 Up                          IPV6 Down
+Type: BROADCAST                         MTU: 1497      
+Priority: L1 64   L2 64   
+Timers:     Csnp: L1 10    L2 10    ,Retransmit: L12 5   , Hello: L1 10 L2 10  ,
+ 
+Hello Multiplier: L1 3    L2 3     , LSP-Throttle Timer: L12 50  
+
+Interface: 10.5.1.31(Loop0)
+Cost: L1 0         L2 0                 Ipv6 Cost: L1 0    L2 0    
+State: IPV4 Up                          IPV6 Down
+Type: P2P                               MTU: 1500      
+Priority: L1 64   L2  64   
+Timers:     Csnp: L12 10  , Retransmit: L12 5   , Hello: 10  ,
+Hello Multiplier: 3            , LSP-Throttle Timer: L12 50  
+
+由以上输出结果可知：AR31 的 IS-Level 错误配置为 Level-1，导致无法与 AR28 建立 Level-2 邻居关系，需要 AR31 的 IS-Level 配置为 Level-1-2。
+
+2.8 综合分析
+
+AR34 没有学习到两条等价默认路由，只从 AR30 学习到一条默认路由的原因是：
+
+AR31 的 IS-Level 错误配置为 Level-1，导致无法与 AR28 建立邻居关系，从而无法为 AR34 下发 ATT 置位 1 的 Level-1 的 LSP，导致 AR34 无法生成指向 AR31 的默认路由。
+
+三、解决方案
+
+3.1 在 AR31 上修改 Level 为 Level-1-2，执行如下命令：
+system-view		// 进入系统视图
+isis 1			// 进入 ISIS 进程
+    is-level level-1-2		// 修改为 Level-1-2
+
+执行完上述命令后，可以在通过如下命令判断故障是否解除：
+在 AR31 上：
+display isis peer			// 查看 AR34 邻居关系
+在 AR34 上：
+display ip routing-table protocol isis	// 查看是否有两条等价默认路由
+
+3.2 高可能性
+
+如果执行完上述命名后，AR31 与 AR28 无法建立邻居关系，则可能出现如下高可能性：
+
+高可能性一：AR28 的接口 GigabitEthernet 0/0/2 未启用 IS-IS，执行如下命令：
+system-view			// 进入系统视图
+interface GigabitEthernet 0/0/2	// 进入接口视图
+    isis enable			// 开启 IS-IS
+
+高可能性二：AR28 和 AR31 的直连接口配置了 IS-IS 认证且认证不一致，执行命令如下：
+system-view				// 进入系统视图
+interface GigabitEthernet 0/0/2		// 进入接口视图
+    display this				// 查看当前接口配置
+    isis authentication-mode md5 cipher xxx	// 修改认证方式和密钥
+
+高可能性三：AR28 的 system-id 与 AR31 的 system-id 配置冲突，执行命令如下：
+system-view					// 进入系统视图
+isis 1						// 进入 ISIS 进程
+    display this					// 查看当前接口配置
+    undo network-entity 49.0006.0000.0000.0031.00      	// 删除错误的系统 ID 配置
+    network-entity 49.0006.0000.0000.0028.00		// 配置正确的系统 ID 配置
+
+如果执行完上述命名后，AR31 与 AR28 邻居关系正常建立，但 AR34 无法收到两条等价默认路由：
+高可能性四：AR31 开启的 ATT 位永不置位，执行命令如下：
+system-view			// 进入系统视图
+isis 1				// 进入 ISIS 进程
+    display this			// 查看当前配置
+    undo attached-bit advertise	// 删除相关命令	
+
+高可能性五：AR31 配置了 nexthop 修改等价默认路由权重，执行命令如下：
+system-view		// 进入系统视图
+isis 1			// 进入 ISIS 进程
+    display this		// 查看当前配置
+    undo nexthop 10.5.x.x	// 删除相应命令
+
+
+执行完上述命令后，可以在通过如下命令判断故障是否解除：
+在 AR31 上：
+display isis peer			// 查看 AR34 邻居关系
+在 AR34 上：
+display ip routing-table protocol isis	// 查看是否有两条等价默认路由
+
+如果故障已经排除，则需要指导客户保存所有设备配置并提交上述故障排查报告：
+return		// 返回用户视图
+save		// 保存设备配置
+y		// 确认保存配置
+
+3.3 如果执行完上述命令后，故障仍未排除，需要客户提供完整的设备配置信息或派遣一线工程师到达客户现场进行故障排查，同时并拨打华为 400 服务热线请求华为专家的帮助，谢谢！
+ 

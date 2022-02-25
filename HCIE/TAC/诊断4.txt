@@ -1,0 +1,252 @@
+一、故障根因
+
+AR28 的 GigabitEthernet 2/0/0 的接口下使用命令 ospf filter-lsa-out ase 过滤了 LSA-5。
+
+二、故障分析
+
+2.1 故障现象确认
+
+首先在 AR32 上指定自身 LoopBack0 接口地址为源，去 ping IS-IS 区域里的设备的 LoopBack0 接口地址，验证故障现象，输出结果如下：
+
+<AR32>ping -a 10.5.1.32 10.5.1.30
+  PING 10.5.1.31: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.1.31 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+<AR32>ping -a 10.5.1.32 10.5.1.31
+  PING 10.5.1.31: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.1.31 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+<AR32>ping -a 10.5.1.32 10.5.1.34
+  PING 10.5.1.31: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.1.31 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+由以上输出结果可知，故障真实发生，根据当前故障现象，自上而下分层分析故障原因。
+
+首先检查 AR32 的路由表中是否存在上述路由条目，判断是否存在控制层面故障。
+
+2.2 检查 AR32 的路由表
+
+通过 display ip routing-table protocol ospf 命令，查看 AR32 是否学习到相关路由，输出结果如下：
+
+<AR32>display ip routing-table protocol ospf 
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Public routing table : OSPF
+         Destinations : 6        Routes : 6        
+
+OSPF routing table status : <Active>
+         Destinations : 6        Routes : 6
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+      10.5.1.27/32  OSPF    10   2           D   10.5.239.28     GigabitEthernet0/0/0
+      10.5.1.28/32  OSPF    10   1           D   10.5.239.28     GigabitEthernet0/0/0
+      10.5.1.29/32  OSPF    10   2           D   10.5.239.28     GigabitEthernet0/0/0
+      10.5.1.33/32  OSPF    10   3           D   10.5.239.28     GigabitEthernet0/0/0
+      10.5.40.0/24  OSPF    10   3           D   10.5.239.28     GigabitEthernet0/0/0
+      10.5.128.0/24  OSPF    10   2           D   10.5.239.28     GigabitEthernet0/0/0
+
+OSPF routing table status : <Inactive>
+         Destinations : 0        Routes : 0
+
+由以上输出结果可知：AR32 路由表中并不存在 IS-IS 区域设备的路由，可知故障发生在控制层面。
+
+而 AR32 路由表中存在下一跳为 AR28 的直连接口地址路由，初步判断 AR32 与 AR28 OSPF 邻居关系建立正常，进一步判断 AR32 无法学习到 IS-IS 区域设备路由的原因，可能原因有如下两种：
+
+（1）AR28 作为 ASBR 没有执行 IS-IS 路由引入
+（2）AR32 无法计算相应外部路由
+
+由于 AR28 无法登录，可以在 AR27 检查 OSPF 链路状态数据库判断 AR28 是否执行了 IS-IS 路由引入。
+
+2.3 检查 AR27 的链路状态数据库
+
+因为 LSA-5 会在 OSPF 除特殊区域外整个自治系统内泛洪，在 AR27 上查看链路状态数据和路由表来验证 AR28（ASBR）是否将 IS-IS 区域路由引入进 OSPF 中，输出结果如下：
+
+<AR27>display ospf lsdb | include External	// 查看 LSA-5
+
+	 OSPF Process 1 with Router ID 10.5.1.27
+		 Link State Database 
+
+		         Area: 0.0.0.0
+ Type      LinkState ID    AdvRouter          Age  Len   Sequence   Metric
+ 
+
+		 AS External Database
+ Type      LinkState ID    AdvRouter          Age  Len   Sequence   Metric
+ External  10.5.1.31       10.5.1.28          761  36    80000002       1
+ External  10.5.1.30       10.5.1.28          761  36    80000002       1
+ External  10.5.1.34       10.5.1.28          761  36    80000002       1
+ External  10.5.14.0       10.5.1.28          761  36    80000002       1
+ External  10.5.34.0       10.5.1.28          761  36    80000002       1
+ External  10.5.130.0      10.5.1.28          781  36    80000002       1
+ External  10.5.129.0      10.5.1.28          781  36    80000002       1
+ 
+<AR27>display ip routing-table protocol ospf 
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Public routing table : OSPF
+         Destinations : 13       Routes : 13       
+
+OSPF routing table status : <Active>
+         Destinations : 13       Routes : 13
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+      10.5.1.28/32  OSPF    10   1           D   10.5.128.28     GigabitEthernet0/0/0
+      10.5.1.29/32  OSPF    10   1           D   10.5.128.30     GigabitEthernet0/0/0
+      10.5.1.30/32  O_ASE   150  1           D   10.5.128.28     GigabitEthernet0/0/0
+      10.5.1.31/32  O_ASE   150  1           D   10.5.128.28     GigabitEthernet0/0/0
+      10.5.1.32/32  OSPF    10   2           D   10.5.128.28     GigabitEthernet0/0/0
+      10.5.1.33/32  OSPF    10   2           D   10.5.128.30     GigabitEthernet0/0/0
+      10.5.1.34/32  O_ASE   150  1           D   10.5.128.28     GigabitEthernet0/0/0
+      10.5.14.0/24  O_ASE   150  1           D   10.5.128.28     GigabitEthernet0/0/0
+      10.5.34.0/24  O_ASE   150  1           D   10.5.128.28     GigabitEthernet0/0/0
+      10.5.40.0/24  OSPF    10   2           D   10.5.128.30     GigabitEthernet0/0/0
+      10.5.129.0/24  O_ASE   150  1           D   10.5.128.28     GigabitEthernet0/0/0
+      10.5.130.0/24  O_ASE   150  1           D   10.5.128.28     GigabitEthernet0/0/0
+      10.5.239.0/24  OSPF    10   2           D   10.5.128.28     GigabitEthernet0/0/0
+
+OSPF routing table status : <Inactive>
+         Destinations : 0        Routes : 0
+
+由以上输出结果可知：AR27 的链路状态数据库存在关于 IS-IS 区域设备的 LSA-5（External），且可以学习到 IS-IS 区域中所有的路由，说明 AR28 成功将 IS-IS 路由引入进 OSPF 区域中。
+
+进一步判断 AR32 是否存在关于 IS-IS 区域设备的 LSA-5（External）。
+
+2.4 检查 AR32 的链路状态数据库
+
+由于 AR32 已经与 AR28 建立 Full 的邻居关系，AR28 已经将 IS-IS 路由引入进 OSPF 中，所以进一步检查 AR32 LSDB 中是否存在 LSA-5，输出结果如下：
+
+<AR32>display ospf lsdb ase originate-router 10.5.1.28
+
+	 OSPF Process 1 with Router ID 10.5.1.32
+		 Link State Database
+
+由以上输出结果可知：AR32 的 LSDB 中没有相应的 LSA-5，考虑到 AR28 已经成功将 IS-IS 路由引入进 OSPF 并且传递给 AR27，初步判断 AR28 在接口下配置针对 LSA-5 的过滤。
+
+进一步判断 AR32 是否存在相应路由过滤导致路由无法计算。
+
+2.5 检查 AR32 是否部署路由过滤策略
+
+通过检查 AR32 是否配置路由过滤的基本工具，输出结果如下：
+
+<AR32>display acl all
+ Total quantity of nonempty ACL number is 0 
+<AR32>display ip ip-prefix 
+
+由以上输出结果可知：AR32 并无相关 acl 和 ip-prefix，可以排除 AR32 部署路由过滤的的可能性。
+
+由于 AR32 的 LoopBack0 接口地址与 IS-IS 区域进行互访，需要保证 AR28 也将 OSPF 引入进 IS-IS 中。
+
+2.6 检查 AR31 和 AE34 的路由表
+
+通过检查 AR31 和 AR34 的路由表，判断是否能够正确学习到 AR32 的 LoopBack0 接口地址路由，输出结果如下：
+
+<AR31>display ip routing-table 10.5.1.32
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Routing Table : Public
+Summary Count : 1
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+      10.5.1.32/32  ISIS-L2 15   74          D   10.5.130.28     GigabitEthernet0/0/2
+<AR34>display ip routing-table 10.5.1.32
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Routing Table : Public
+Summary Count : 2
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+        0.0.0.0/0   ISIS-L1 15   10          D   10.5.34.30      GigabitEthernet0/0/0
+                         ISIS-L1 15   10          D   10.5.14.31      GigabitEthernet0/0/1
+
+由以上输出结果可知：AR31 的路由表由 AR32 的 LoopBack0 接口地址路由，AR34 上两条等价负载默认路由，说明 AR28 成功将 OSPF 的路由引入进 IS-IS 中，单点双向引入正确。
+
+同时也可以排除 AR31 和 AR34 存在路由过滤的可能性，由于 AR30 无法登录，所以无法排除 AR30 上是否存在路由过滤。
+
+2.7 排除流量过滤导致故障
+
+考虑后续数据互访过程中可能存在流量过滤导致 AR32 的 LoopBack0 接口地址无法访问 IS-IS 区域中的设备，在 AR32、AR31、AR34 检查是否存在流量过滤，输出结果如下：
+
+dispaly acl all			// 检查流量过滤基本工具
+dispaly traffic-filter applied-record	// 检查是否存在流量过滤
+dispaly traffic applied-record		// 检查是否存在流策略
+
+由以上输出结果可知：AR32、AR31、AR34 并不存在相应流量过滤策略，排除流量过滤策略导致故障
+
+2.8 综合分析
+
+综上，AR27 和 AR31 均可以学习到对方路由协议的路由，说明 AR28（ASBR）单点双向引入配置正确。
+
+由于 IS-IS 路由会以 LSA-5 在 OSPF 整个自治系统内泛洪，AR32 与 AR28 邻居关系正常，但是 AR32 的 LSDB 中并无相关的 LSA-5
+排除 AR32 部署路由过滤的可能性，所以判断故障的根本原因为：AR28 的 GigabitEthernet 2/0/0 接口下使用 ospf filter-lsa-out ase 过滤了 LSA-5。
+
+三、解决方案
+
+3.1 解决方案
+
+在 AR28 的 GigabitEthernet 2/0/0 接口下删除 ospf filter-lsa-out ase 命令：
+system-view			// 进入系统视图
+    interface GigabitEthernet 2/0/0	// 进入接口视图
+        display this			// 查看当前接口下配置
+        undo ospf filter-lsa-out		// 删除过滤 LSA-5 的命令
+
+执行上述方案后，在 AR32 上通过如下命令验证故障是否解决：
+display ip routing-table protocal ospf	// 检查 AR32 是否学习到 IS-IS 区域中的路由
+ping -a 10.5.1.32 10.5.1.x		// 测试 IS-IS 网络业务地址能否互通
+
+3.2 高可能性
+
+如果执行完上述解决方案后，仍然存在无法互访的故障，则可能存在如下高可能性：
+
+高可能性一：AR30 的 IS-IS 进程下存在路由过滤，需要执行如下命令：
+system-view			// 进入系统视图
+isis 1				// 进入 IS-IS 视图
+    display this			// 查看当前配置
+    undo filter-policy import		// 删除路由过滤命令
+
+高可能性二：AR28 和 AR30 的接口下存在流量过滤，需要执行如下命令：
+system-view				// 进入系统视图
+    interface GigabitEthernet 0/0/X		// 进入 AR28 和 AR30 的直连链路接口
+        display this				// 查看当前接口下配置
+        undo traffic-filter inbound/outbound	// 删除接口下的流量过滤行为
+        undo traffic-policy inbound/outbound	// 删除接口下的流量过滤行为
+
+执行上述方案后，在 AR32 上通过如下命令验证故障是否解决：
+display ip routing-table protocal ospf	// 检查 AR32 是否学习到 IS-IS 区域中的路由
+ping -a 10.5.1.32 10.5.1.x		// 测试 IS-IS 网络业务地址能否互通
+
+如果故障已排除，需要指导客户保存所有设备配置并提交上述故障排查报告：
+return                       // 返回用户视图
+save                         // 确认所有设备保存当前配置
+y		// 确认保存配置
+
+                                    
+3.3 如果执行完上述所有命令后，故障依旧存在，则需要用户提供完整的设备信息或者派遣一线工程师到达用户现场进行排查，同时拨打华为 400 服务热线请求华为专家的协助，谢谢！

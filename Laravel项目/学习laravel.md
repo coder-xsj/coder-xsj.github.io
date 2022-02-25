@@ -96,6 +96,8 @@ ctrl + . 折叠代码
 
   如果已经将本地的文件提交到了远端，那么需要将远端提交的文件给删掉，删除指令为：
 
+git config --global --unset http.proxy  删除代理
+
 ```java
 git rm -r --cached .idea 
 ```

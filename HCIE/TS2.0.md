@@ -1420,7 +1420,7 @@ R11
 
 ##### 解决方案
 
-###### 一、R19 配置入向复杂流分类将语音流量进行重标记
+###### 一、R19 配置入向复杂流分类将语音流量进行重标记                                                                                                                                                                                                                                                                                                                                                                                            
 
 1. 定义 ACL
 
@@ -1942,7 +1942,7 @@ user-interface vty 0 4
 user-interface vty 0 4
 	authentication-mode password
 	set authentication password cipher hcie  # 修改
-	user privilege level 3  # 加上
+	user privilege level 0  # 加上
 ```
 
 ------

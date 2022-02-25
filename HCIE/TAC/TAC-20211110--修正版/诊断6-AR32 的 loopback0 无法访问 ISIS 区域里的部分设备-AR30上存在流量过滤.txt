@@ -1,0 +1,335 @@
+
+AR27.AR28.AR29.AR32和AR33运行OSPF，AR28.AR30.AR31和AR34运行isis。
+在AR28上做了双向路由引入，全SITE路由可达。
+问：AR32的loopback0无法访问ISIS区域里的部分设备。
+
+
+1.网络故障点的根因判断：
+
+综上所述，AR30的GigabitEthernet0/0/0接口出方向配置了针对源IP地址为AR32的Loopback0 的流量过滤行为。
+
+2.分析思路
+
+2.1 故障现象确认
+
+首先在AR32上带源 ping ISIS 区域设备ip地址，这里只输出无法访问的地址，验证故障现象，结果输出如下：
+
+<AR32>ping -a 10.5.1.32 10.5.1.34
+  PING 10.5.1.34: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.1.34 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+<AR32>ping -a 10.5.1.32 10.5.134.34
+  PING 10.5.134.34: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.134.34 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+由以上输出结果可知 ，AR32的Loopback0 接口确实无法访问ISIS区域部分设备，故障真实存在。根据故障发生的现象，自上而下分层的分析故障原因。
+
+2.2  检查是否存在控制层面故障
+
+2.2.1 检查AR32的路由表
+
+造成上述故障原因可能是AR32没有学习到AR34的相关接口对应路由条目，检查AR32的路由表判断是否存在控制层面故障，结果输出如下：
+
+<AR32>display ip routing-table | include ASE
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Routing Tables: Public
+         Destinations : 16       Routes : 16       
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+10.5.1.30/32  O_ASE   150  1           D   10.5.232.28     GigabitEthernet0/0/0
+10.5.1.31/32  O_ASE   150  1           D   10.5.232.28     GigabitEthernet0/0/0
+10.5.1.34/32  O_ASE   150  1           D   10.5.232.28     GigabitEthernet0/0/0
+10.5.134.0/24  O_ASE   150  1           D   10.5.232.28     GigabitEthernet0/0/0
+10.5.230.0/24  O_ASE   150  1           D   10.5.232.28     GigabitEthernet0/0/0
+10.5.231.0/24  O_ASE   150  1           D   10.5.232.28     GigabitEthernet0/0/0
+10.5.234.0/24  O_ASE   150  1           D   10.5.232.28     GigabitEthernet0/0/0
+
+由以上输出结果可知：AR32路由表中存在所有ISIS区域设备的路由，初步判断在AR28上成功将ISIS的路由引入进OSPF中。
+
+2.2.2 检查AR31和AR34的路由表
+
+造成上述故障原因也可能是，AR34或AR31没有学习到AR32的Loopback0接口地址对应路由条目，检查ISIS区域设备的路由表，结果输出如下：
+
+<AR31>display ip routing-table protocol isis
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Public routing table : ISIS
+         Destinations : 7        Routes : 7        
+
+ISIS routing table status : <Active>
+         Destinations : 7        Routes : 7
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+      10.5.1.28/32  ISIS-L2 15   74          D   10.5.231.28     GigabitEthernet0/0/2
+      10.5.1.30/32  ISIS-L1 15   20          D   10.5.234.34     GigabitEthernet0/0/1
+      10.5.1.32/32  ISIS-L2 15   74          D   10.5.231.28     GigabitEthernet0/0/2
+      10.5.1.34/32  ISIS-L1 15   10          D   10.5.234.34     GigabitEthernet0/0/1
+     10.5.134.0/24  ISIS-L1 15   20          D   10.5.234.34     GigabitEthernet0/0/1
+     10.5.230.0/24  ISIS-L1 15   30          D   10.5.234.34     GigabitEthernet0/0/1
+     10.5.232.0/24  ISIS-L2 15   74          D   10.5.231.28     GigabitEthernet0/0/2
+
+ISIS routing table status : <Inactive>
+         Destinations : 0        Routes : 0
+
+<AR34>display ip routing-table protocol isis
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Public routing table : ISIS
+         Destinations : 5        Routes : 6        
+
+ISIS routing table status : <Active>
+         Destinations : 5        Routes : 6
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+        0.0.0.0/0   ISIS-L1 15   10          D   10.5.234.31     GigabitEthernet0/0/1
+                    ISIS-L1 15   10          D   10.5.134.30     GigabitEthernet0/0/0
+      10.5.1.30/32  ISIS-L1 15   10          D   10.5.134.30     GigabitEthernet0/0/0
+      10.5.1.31/32  ISIS-L1 15   10          D   10.5.234.31     GigabitEthernet0/0/1
+     10.5.230.0/24  ISIS-L1 15   20          D   10.5.134.30     GigabitEthernet0/0/0
+     10.5.231.0/24  ISIS-L1 15   20          D   10.5.234.31     GigabitEthernet0/0/1
+
+ISIS routing table status : <Inactive>
+         Destinations : 0        Routes : 0
+
+
+以上输出结果可知，AR31和AR34的路由表中存在访问到AR32 Loopback0接口地址的可达路由，由此判断AR28双向重分布正确无误，排除控制层面的故障，进一步判断是否存在数据层面故障。
+
+2.3 检查是否存在数据层面故障
+
+2.3.1 检查是否存在基于目标IP地址的流量过滤策略
+
+数据转发层面故障原因很多，首先判断是否存在基于目标IP地址的过滤，以不指定源IP地址方式ping上述不可达地址，结果输出如下：
+
+<AR32>ping 10.5.1.34
+  PING 10.5.1.34: 56  data bytes, press CTRL_C to break
+    Reply from 10.5.1.34: bytes=56 Sequence=1 ttl=253 time=50 ms
+    Reply from 10.5.1.34: bytes=56 Sequence=2 ttl=253 time=30 ms
+    Reply from 10.5.1.34: bytes=56 Sequence=3 ttl=253 time=30 ms
+    Reply from 10.5.1.34: bytes=56 Sequence=4 ttl=253 time=30 ms
+    Reply from 10.5.1.34: bytes=56 Sequence=5 ttl=253 time=50 ms
+
+  --- 10.5.1.34 ping statistics ---
+    5 packet(s) transmitted
+    5 packet(s) received
+    0.00% packet loss
+    round-trip min/avg/max = 30/38/50 ms
+
+<AR32>ping 10.5.134.34
+  PING 10.5.134.34: 56  data bytes, press CTRL_C to break
+    Reply from 10.5.134.34: bytes=56 Sequence=1 ttl=253 time=40 ms
+    Reply from 10.5.134.34: bytes=56 Sequence=2 ttl=253 time=30 ms
+    Reply from 10.5.134.34: bytes=56 Sequence=3 ttl=253 time=20 ms
+    Reply from 10.5.134.34: bytes=56 Sequence=4 ttl=253 time=40 ms
+    Reply from 10.5.134.34: bytes=56 Sequence=5 ttl=253 time=40 ms
+
+  --- 10.5.134.34 ping statistics ---
+    5 packet(s) transmitted
+    5 packet(s) received
+    0.00% packet loss
+    round-trip min/avg/max = 20/34/40 ms
+
+由以上输出可知，不存在基于目标IP地址的流量过滤，初步判断存在基于源地址（AR32 loopback0）的流量过滤。
+
+2.3.2  定位配置基于源IP地址的流量过滤策略的设备
+
+在 AR32 上带源 tracert ISIS 区域无法访问的两个接口，查看沿途哪台设备存在基于源流量过滤，结果输出如下：
+
+<AR32>tracert -a 10.5.1.32 10.5.1.34
+
+ traceroute to  10.5.1.34(10.5.1.34), max hops: 30 ,packet length: 40,press CTRL
+_C to break 
+
+ 1 10.5.232.28 40 ms  10 ms  20 ms 
+
+ 2 10.5.231.31 30 ms 10.5.230.30 40 ms 10.5.231.31 30 ms 
+
+ 3  * 10.5.234.34 40 ms  * 
+
+<AR32>tracert -a 10.5.1.32 10.5.134.34
+
+ traceroute to  10.5.134.34(10.5.134.34)
+, max hops: 30 ,packet length: 40,press CTRL_C to break 
+
+ 1 10.5.232.28 30 ms  20 ms  20 ms 
+
+ 2 10.5.230.30 30 ms  20 ms  40 ms 
+
+ 3  *  *  * 
+
+由以上输出结果可知，数据转发在 AR30与AR34之间出现超时，初步判断AR30与AR34 直连链路存在数据过滤，需要进一步判断是在AR30还是AR34上配置上述过滤策略。
+
+2.3.3  定位基于源IP地址的流量过滤策略具体配置位置
+
+在AR32上进行多次ping测试，在AR34上查看报文接收情况，判断流量过滤策略具体配置位置，结果输出如下：
+
+<AR32>ping -a 10.5.1.32 10.5.1.34
+  PING 10.5.1.34: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.1.34 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+<AR34>display interface GigabitEthernet 0/0/0
+GigabitEthernet0/0/0 current state : UP
+Line protocol current state : UP
+Last line protocol up time : 2017-11-27 15:33:38 UTC-08:00
+Description:HUAWEI, AR Series, GigabitEthernet0/0/0 Interface
+Route Port,The Maximum Transmit Unit is 1500
+Internet Address is 10.5.134.34/24
+IP Sending Frames' Format is PKTFMT_ETHNT_2, Hardware address is 00e0-fc83-528a
+Last physical up time   : 2017-11-27 15:33:38 UTC-08:00
+Last physical down time : 2017-11-27 15:33:22 UTC-08:00
+Current system time: 2017-11-27 16:18:20-08:00
+Port Mode: FORCE COPPER
+Speed : 1000,  Loopback: NONE
+Duplex: FULL,  Negotiation: ENABLE
+Mdi   : AUTO
+Last 300 seconds input rate 7496 bits/sec, 0 packets/sec
+Last 300 seconds output rate 1216 bits/sec, 0 packets/sec
+Input peak rate 12112 bits/sec,Record time: 2017-11-27 15:48:39
+Output peak rate 4936 bits/sec,Record time: 2017-11-27 15:33:44
+
+Input:  1921 packets, 2505455 bytes
+  Unicast:                  6,  Multicast:                1912
+  Broadcast:                3,  Jumbo:                       0
+  Discard:                  0,  Total Error:                 0
+
+  CRC:                      0,  Giants:                      0
+  Jabbers:                  0,  Throttles:                   0
+  Runts:                    0,  Symbols:                     0
+  Ignoreds:                 0,  Frames:                      0
+
+Output:  299 packets, 417258 bytes
+  Unicast:                  7,  Multicast:                 290
+  Broadcast:                2,  Jumbo:                       0
+  Discard:                  0,  Total Error:                 0
+
+  Collisions:               0,  ExcessiveCollisions:         0
+  Late Collisions:          0,  Deferreds:                   0
+
+    Input bandwidth utilization threshold : 100.00%
+    Output bandwidth utilization threshold: 100.00%
+    Input bandwidth utilization  :    0%
+    Output bandwidth utilization :    0%
+
+<AR34>display interface GigabitEthernet 0/0/0
+GigabitEthernet0/0/0 current state : UP
+Line protocol current state : UP
+Last line protocol up time : 2017-11-27 15:33:38 UTC-08:00
+Description:HUAWEI, AR Series, GigabitEthernet0/0/0 Interface
+Route Port,The Maximum Transmit Unit is 1500
+Internet Address is 10.5.134.34/24
+IP Sending Frames' Format is PKTFMT_ETHNT_2, Hardware address is 00e0-fc83-528a
+Last physical up time   : 2017-11-27 15:33:38 UTC-08:00
+Last physical down time : 2017-11-27 15:33:22 UTC-08:00
+Current system time: 2017-11-27 16:18:22-08:00
+Port Mode: FORCE COPPER
+Speed : 1000,  Loopback: NONE
+Duplex: FULL,  Negotiation: ENABLE
+Mdi   : AUTO
+Last 300 seconds input rate 7496 bits/sec, 0 packets/sec
+Last 300 seconds output rate 1216 bits/sec, 0 packets/sec
+Input peak rate 12112 bits/sec,Record time: 2017-11-27 15:48:39
+Output peak rate 4936 bits/sec,Record time: 2017-11-27 15:33:44
+
+Input:  1922 packets, 2506969 bytes
+  Unicast:                  6,  Multicast:                1913
+  Broadcast:                3,  Jumbo:                       0
+  Discard:                  0,  Total Error:                 0
+
+  CRC:                      0,  Giants:                      0
+  Jabbers:                  0,  Throttles:                   0
+  Runts:                    0,  Symbols:                     0
+  Ignoreds:                 0,  Frames:                      0
+
+Output:  300 packets, 418772 bytes
+  Unicast:                  7,  Multicast:                 291
+  Broadcast:                2,  Jumbo:                       0
+  Discard:                  0,  Total Error:                 0
+
+  Collisions:               0,  ExcessiveCollisions:         0
+  Late Collisions:          0,  Deferreds:                   0
+
+    Input bandwidth utilization threshold : 100.00%
+    Output bandwidth utilization threshold: 100.00%
+    Input bandwidth utilization  :    0%
+    Output bandwidth utilization :    0%
+
+由以上输出结果可知，AR32多次执行ping包命令，AR34 GigabitEthernet0/0/0 接口的单播报文并未增加，因此判断AR30的GigabitEthernet 0/0/0接口存在针对源地址（AR32 loopback0接口）的出方向过滤。
+
+2.4 排查是否存在反向流量过滤策略
+
+在AR34上反向tracert AR32的Loopback0，结果输出如下：
+
+<AR34>tracert -a 10.5.1.34 10.5.1.32
+
+ traceroute to  10.5.1.32(10.5.1.32), max hops: 30 ,packet length: 40,press CTRL_C to break 
+
+ 1 10.5.234.31 40 ms  20 ms  20 ms 
+
+ 2 10.5.231.28 30 ms  20 ms 10.5.230.28 30 ms 
+
+ 3 10.5.232.32 40 ms  30 ms  20 ms 
+
+由以上输出结果可知，反向数据转发正常，不存在过滤。
+
+2.5  综合分析
+
+综上所述，AR30的GigabitEthernet0/0/0接口出方向配置了针对源IP地址为AR32的Loopback0 的流量过滤行为。
+
+3.解决方案
+
+3.1 解决方案
+
+在AR28上修改ACL放行相应的流量 
+
+         system-view                             //进入系统视图
+         acl  {对应ACL序号}                      //如果存在ACL进行流量过滤，则修改ACL
+         rule permit source x.x.x.x x.x.x.x      //放行相应的流量
+
+执行完上述命令，在AR32上重新指定源地址ping测试以上无法访问的IP地址，验证故障是否排除。
+
+3.2 高可能性
+
+如果上述配置完成之后，故障仍然存在，则沿途设备可能存在其他高级ACL，需要将高级ACL删除。
+
+在AR32上使用 ping 验证故障是否消除，如果故障已排除，需要指导客户保存所有设备配置并提交上述故障排查报告：
+
+Return                                               //所有设备退出至<HuaWei>视图下
+save                                                //所有设备保存配置，防止掉电故障重现
+y			     //输入Y，确认配置保存
+
+如果执行完上述所有命令后，故障依旧存在，则需要用户提供完整的设备信息或者派遣一线工程师到达用户现场进行排查，同时拨打华为400服务热线请求华为专家的协助，谢谢！
+
+
+
+
+

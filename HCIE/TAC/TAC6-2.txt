@@ -1,0 +1,230 @@
+一、故障根因
+
+AR30 的 GitabitEthernet0/0/0 接口出向配置针对源 IP 地址为 AR32 的 LoopBack0 流量过滤行为。
+
+二、故障分析
+
+2.1 故障重现
+
+在 AR32 上使用自身 LoopBack0 接口地址为源，去 ping IS-IS 区域中设备的 IP 地址，这里只显示无法访问的，验证故障现象，输出结果如下：
+
+<AR32>ping -a 10.5.1.32 10.5.1.34
+  PING 10.5.1.34: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.1.34 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+<AR32>ping -a 10.5.1.32 10.5.34.34
+  PING 10.5.34.34: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.34.34 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+由以上输出结果可知：AR32 无法访问 AR34 的 GitabitEthernet0/0/0 接口和 LoopBack0 接口地址路由信息，故障真实发生，根据故障现象，自上而下分层分析故障原因。
+
+首先检查 AR32 路由表中是否存在 IS-IS 区域中设备的路由，判断故障是否发生在控制层面。
+
+2.2 检查 AR32 的路由表
+
+在 AR32 上通过 display ip routing-table | include ASE 查看是否存在 IS-IS 区域设备的路由信息，输出结果如下：
+
+<AR32>display ip routing-table | include ASE
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Routing Tables: Public
+         Destinations : 21       Routes : 21       
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+10.5.1.30/32  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+10.5.1.31/32  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+10.5.1.34/32  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+10.5.14.0/24  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+10.5.34.0/24  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+10.5.129.0/24  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+10.5.130.0/24  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+
+由以上输出结果可知：AR32 路由表中存在 IS-IS 区域中所有路由信息，包括 AR34 的 GitabitEthernet0/0/0 接口和 LoopBack0 接口地址路由信息。
+
+2.3 检查 AR31 和 AR34 是否有回包路由
+
+在 AR31 和 AR34 的路由表中检查是否存在 AR32 的 LoopBack0 的回包路由，输出结果如下：
+
+<AR31>display ip routing-table 10.5.1.32
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Routing Table : Public
+Summary Count : 1
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+      10.5.1.32/32  ISIS-L2 15   74          D   10.5.130.28     GigabitEthernet0/0/2
+
+<AR34>display ip routing-table 10.5.1.32
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Routing Table : Public
+Summary Count : 2
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+        0.0.0.0/0   ISIS-L1 15   10          D   10.5.14.31      GigabitEthernet0/0/1
+                         ISIS-L1 15   10          D   10.5.34.30      GigabitEthernet0/0/0
+
+
+由以上输出可知：AR31 中存在 AR32 的 LoopBack0 的回包路由，AR34 通过默认路由访问 AR32 的 LoopBack0 地址。
+
+根据上述情况，判断未存在控制层面故障，进一步检查数据转发层面是否存在故障。
+
+2.4 检查是否存在基于目标 IP 地址的流量过滤行为
+
+数据转发层面故障有很多，首先查看是否存在基于目的 IP 地址的流量过滤。
+
+在 AR32 上不指定源地址，去 ping 如下地址（基于目标 IP 地址过滤），输出结果如下：
+
+<AR32>ping 10.5.1.34
+  PING 10.5.1.34: 56  data bytes, press CTRL_C to break
+    Reply from 10.5.1.34: bytes=56 Sequence=1 ttl=253 time=40 ms
+    Reply from 10.5.1.34: bytes=56 Sequence=2 ttl=253 time=20 ms
+    Reply from 10.5.1.34: bytes=56 Sequence=3 ttl=253 time=30 ms
+    Reply from 10.5.1.34: bytes=56 Sequence=4 ttl=253 time=30 ms
+    Reply from 10.5.1.34: bytes=56 Sequence=5 ttl=253 time=20 ms
+
+  --- 10.5.1.34 ping statistics ---
+    5 packet(s) transmitted
+    5 packet(s) received
+    0.00% packet loss
+    round-trip min/avg/max = 20/28/40 ms
+
+<AR32>ping 10.5.34.34
+  PING 10.5.34.34: 56  data bytes, press CTRL_C to break
+    Reply from 10.5.34.34: bytes=56 Sequence=1 ttl=253 time=30 ms
+    Reply from 10.5.34.34: bytes=56 Sequence=2 ttl=253 time=20 ms
+    Reply from 10.5.34.34: bytes=56 Sequence=3 ttl=253 time=40 ms
+    Reply from 10.5.34.34: bytes=56 Sequence=4 ttl=253 time=30 ms
+    Reply from 10.5.34.34: bytes=56 Sequence=5 ttl=253 time=30 ms
+
+  --- 10.5.34.34 ping statistics ---
+    5 packet(s) transmitted
+    5 packet(s) received
+    0.00% packet loss
+    round-trip min/avg/max = 20/30/40 ms
+
+由以上输出结果可知：AR34 上并未存在基于目标 IP 地址的流量过滤行为，进一步检查是否存在基于源 IP 地址过滤的行为。
+
+2.5 检查是否存在基于源 IP 地址的过滤行为
+
+在 AR32 以自身 LoopBack0 地址作为 tracert 的源地址去访问如下地址，判断是否存在源 IP 地址的过滤行为，输出结果如下：
+
+<AR32>tracert -a 10.5.1.32 10.5.1.34
+
+ traceroute to  10.5.1.34(10.5.1.34), max hops: 30 ,packet length: 40,press CTRL
+_C to break 
+
+ 1 10.5.239.28 10 ms  20 ms  10 ms 
+
+ 2 10.5.129.30 20 ms  30 ms  20 ms 
+
+ 3  *  *  * 
+
+<AR32>tracert -a 10.5.1.32 10.5.34.34
+
+ traceroute to  10.5.34.34(10.5.34.34), max hops: 30 ,packet length: 40,press CT
+RL_C to break 
+
+ 1 10.5.239.28 20 ms  10 ms  30 ms 
+
+ 2 10.5.129.30 10 ms  30 ms  20 ms 
+
+ 3  *  *  * 
+
+由以上输出结果可知：数据转发超时一直发生在 AR30 与 AR34 之间，初步判断 AR30 与 AR34 之间配置了针对源 IP 地址为 AR32 的 LoopBack0 的路由过滤行为。
+
+进一步查看源 IP 地址过滤行为发生在哪个位置。
+
+2.6 检查源 IP 地址过滤行为发生在哪个位置
+
+在 AR32 上以自身 LoopBack0 接口为源，多次去 ping AR34 的 GigabitEthernet0/0/0 接口地址 10.5.34.34，查看 AR32 的 GigabitEthernet0/0/0 接口报文增长情况，输出结果如下：
+
+第一次：
+<AR34>display interface GigabitEthernet 0/0/0
+GigabitEthernet0/0/0 current state : UP
+Line protocol current state : UP
+<......略>
+
+Input:  539 packets, 787686 bytes
+  Unicast:                 12,  Multicast:                 525
+  Broadcast:                2,  Jumbo:                       0
+  Discard:                  0,  Total Error:                 0
+
+  CRC:                      0,  Giants:                      0
+  Jabbers:                  0,  Throttles:                   0
+  Runts:                    0,  Symbols:                     0
+  Ignoreds:                 0,  Frames:                      0
+
+Output:  1569 packets, 1963451 bytes
+  Unicast:                 21,  Multicast:                1545
+  Broadcast:                3,  Jumbo:                       0
+  Discard:                  0,  Total Error:                 0
+
+  Collisions:               0,  ExcessiveCollisions:         0
+  Late Collisions:          0,  Deferreds:                   0
+
+第二次
+
+<......略>
+<AR34>display interface GigabitEthernet 0/0/0
+GigabitEthernet0/0/0 current state : UP
+Line protocol current state : UP
+
+Input:  560 packets, 819480 bytes
+  Unicast:                 12,  Multicast:                 546
+  Broadcast:                2,  Jumbo:                       0
+  Discard:                  0,  Total Error:                 0
+
+  CRC:                      0,  Giants:                      0
+  Jabbers:                  0,  Throttles:                   0
+  Runts:                    0,  Symbols:                     0
+  Ignoreds:                 0,  Frames:                      0
+
+Output:  1635 packets, 2048173 bytes
+  Unicast:                 21,  Multicast:                1611
+  Broadcast:                3,  Jumbo:                       0
+  Discard:                  0,  Total Error:                 0
+
+  Collisions:               0,  ExcessiveCollisions:         0
+  Late Collisions:          0,  Deferreds:                   0
+
+由以上输出结果可知， AR32 的 GigabitEthernet 0/0/0 接口状态为 UP，且多次 ping 之后，发现单播 Unicast 报文未增长，因此判断 AR30 的 GigabitEthernet 0/0/0 存在针对源 IP 地址为 AR32 的 LoopBack0 地址的流量过滤行为
+
+2.4 排查是否反向流量过滤
+
+在 AR34 上反向 tracert AR32 的 LoopBack0，输出结果如下：
+
+<AR34>tracert -a 10.5.1.34 10.5.1.32
+
+ traceroute to  10.5.1.32(10.5.1.32), max hops: 30 ,packet length: 40,press CTRL
+_C to break 
+
+ 1 10.5.14.31 30 ms  20 ms  10 ms 
+ 2 10.5.130.28 10 ms  20 ms 10.5.129.28 30 ms 
+ 3 10.5.239.32 30 ms  40 ms  20 ms 
+
+由如上输出结果可知：并不存在反向流量过滤。
+
+2.5 综上所述
+
+AR30 的 GitabitEthernet0/0/0 接口出向配置针对源 IP 地址为 AR32 的 LoopBack0 流量过滤行为。
+

@@ -1,0 +1,335 @@
+一、故障根因判断
+
+LSW6上用于连接AR29的接口VLAN划分错误，与连接AR28接口VLAN不一致。
+
+二、故障分析
+
+2.1 故障现象确认
+
+在AR29上以自身loopback0接口地址为源地址，去ping AR28的loopback0接口地址，输出结果如下：
+
+<AR29>ping -a 10.5.1.29 10.5.1.28
+  PING 10.5.1.28: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.1.28 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+由以上输出结果可知故障真实存在，根据当前故障现象，自上而下分层分析故障原因。
+
+首先，在AR29上查看路由表以确定是否存在AR28的loopback0接口地址对应的路由信息，判断是否存在控制层面故障。
+
+2.2 检查路由表
+
+在AR29上检查路由表，查看是否存在到AR28的loopback0接口地址的路由，输出结果如下：
+
+<AR29>display ip routing-table                            //检查AR29的路由表
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Routing Tables: Public
+         Destinations : 11       Routes : 11       
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+   10.5.1.29/32  Direct  0    0           D   127.0.0.1       LoopBack0
+   10.5.128.0/24  Direct  0    0           D   10.5.128.29     GigabitEthernet0/0/0
+   10.5.128.29/32  Direct  0    0           D   127.0.0.1       GigabitEthernet0/0/0
+   10.5.128.255/32  Direct  0    0           D   127.0.0.1       GigabitEthernet0/0/0
+   10.5.233.0/24  Direct  0    0           D   10.5.233.29     GigabitEthernet0/0/1
+   10.5.233.29/32  Direct  0    0           D   127.0.0.1       GigabitEthernet0/0/1
+   10.5.233.255/32  Direct  0    0           D   127.0.0.1       GigabitEthernet0/0/1
+   127.0.0.0/8   Direct  0    0           D   127.0.0.1       InLoopBack0
+   127.0.0.1/32  Direct  0    0           D   127.0.0.1       InLoopBack0
+   127.255.255.255/32  Direct  0    0           D   127.0.0.1       InLoopBack0
+   255.255.255.255/32  Direct  0    0           D   127.0.0.1       InLoopBack0
+
+由以上输出结果可知：AR29并没有AR28的loopback0接口地址对应的路由，判断故障发生在控制层面，由于AR28和AR29之间运行OSPF路由协议，
+
+所以需要进一步检查AR29与AR28的OSPF邻居关系是否正常。
+
+2.3 检查AR29的OSPF邻居关系
+
+在A29上检查OSPF邻居关系，判断与AR28的邻居关系是否正常，输出结果如下：
+
+<AR29>display ospf peer brief               //检查AR29 OSPF邻居表
+
+	 OSPF Process 1 with Router ID 10.5.1.29
+		  Peer Statistic Information
+ ----------------------------------------------------------------------------
+ Area Id          Interface                        Neighbor id      State    
+ ----------------------------------------------------------------------------
+
+由以上输出结果可知：AR29没有与AR28、AR27建立OSPF邻居关系，所以初步判断OSPF配置错误，需进一步检查OSPF配置。
+
+2.4 检查A29相关接口是否启用OSPF
+
+在AR29上用display ospf brief命令来检查AR29是正确配置了OSPF，接口是否启用OSPF并宣告进相应区域，输出结果如下：
+
+<AR29>display ospf brief                                //检查AR29的OSPF基本信息
+
+	 OSPF Process 1 with Router ID 10.5.1.29
+		 OSPF Protocol Information
+
+ RouterID: 10.5.1.29        Border Router:  AREA 
+……<略>
+ 
+ Area: 0.0.0.0          (MPLS TE not enabled)
+ Authtype: MD5   Area flag: Normal
+ SPF scheduled Count: 6     
+ ExChange/Loading Neighbors: 0
+ Router ID conflict state: Normal
+ Area interface up count: 2
+
+ Interface: 10.5.128.29 (GigabitEthernet0/0/0)
+ Cost: 1       State: DR        Type: Broadcast    MTU: 1500  
+ Priority: 1
+ Designated Router: 10.5.128.29
+ Backup Designated Router: 0.0.0.0
+ Timers: Hello 10 , Dead 40 , Poll  120 , Retransmit 5 , Transmit Delay 1 
+
+ Interface: 10.5.1.29 (LoopBack0)
+ Cost: 0       State: P-2-P     Type: P2P       MTU: 1500  
+ Timers: Hello 10 , Dead 40 , Poll  120 , Retransmit 5 , Transmit Delay 1 
+<……略>
+
+由以上输出结果可知：AR29的OSPF配置正确，相应直连接口和loopback0也宣告进OSPF区域0中，
+
+所以需要进一步检查AR28的OSPF是否配置正确。
+
+2.5 检查AR28的OSPF配置是否正确
+
+由于AR28无法登录，考虑到AR28与AR29、AR27都运行OSPF协议，所以可以通过检查AR27的OSPF配置来判断AR28配置是否正确，
+
+检查AR27的OSPF配置，输出结果如下：
+<AR27>display  ospf brief                                        //检查ARP27的OSPF基本信息
+
+	 OSPF Process 1 with Router ID 10.5.1.27
+		 OSPF Protocol Information
+
+ RouterID: 10.5.1.27        Border Router: 
+……<略>
+ 
+ Area: 0.0.0.0          (MPLS TE not enabled)
+ Authtype: MD5   Area flag: Normal
+ SPF scheduled Count: 6     
+ ExChange/Loading Neighbors: 0
+ Router ID conflict state: Normal
+ Area interface up count: 2
+
+ Interface: 10.5.128.27 (GigabitEthernet0/0/0)
+ Cost: 1       State: BDR       Type: Broadcast    MTU: 1500  
+ Priority: 1
+ Designated Router: 10.5.128.28
+ Backup Designated Router: 10.5.128.27
+ Timers: Hello 10 , Dead 40 , Poll  120 , Retransmit 5 , Transmit Delay 1 
+
+ Interface: 10.5.1.27 (LoopBack0)
+ Cost: 0       State: P-2-P     Type: P2P       MTU: 1500  
+ Timers: Hello 10 , Dead 40 , Poll  120 , Retransmit 5 , Transmit Delay 1 
+
+<AR27>display ospf peer brief                                                        //检查AR27的OSPF邻居关系
+
+	 OSPF Process 1 with Router ID 10.5.1.27
+		  Peer Statistic Information
+ ----------------------------------------------------------------------------
+ Area Id          Interface                        Neighbor id      State    
+ 0.0.0.0          GigabitEthernet0/0/0             10.5.1.28        Full        
+ ----------------------------------------------------------------------------
+
+
+<AR27>display ip routing-table  10.5.1.28                                       //查看AR27是否接收到AR28的loopback0路由
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Routing Tables: Public
+         Destinations : 30       Routes : 30       
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+10.5.1.28/32  OSPF    10   1           D   10.5.128.28     GigabitEthernet0/0/0
+
+由以上输出结果可知：AR27与AR28能正常建立OSPF完全邻接关系，并且AR27能够学习到AR28的loopback0地址，
+
+初步判断AR28的OSPF配置正确，并且通过AR27和AR29的配置结果，可以初步判断Router-id冲突、区域ID错误、Hello/Dead时间不一致等故障并不存在，
+
+由于区域0采用MD5认证，需要进一步通过检查OSPF错误报文信息判断是否由于认证密码不一致导致OSPF邻居关系无法建立。
+
+2.6 检查AR29的接口OSPF错误报文
+
+在AR29上使用display ospf error interface命令检查是否出现OSPF邻居建立的错误报文，测试及输出结果如下：
+
+<AR29>display ospf error interface g0/0/0                           //检查相应接口OSPF错误报文
+
+	 OSPF Process 1 with Router ID 10.5.1.29
+		 OSPF error statistics 
+
+ Interface: GigabitEthernet0/0/0 (10.5.128.29)
+General packet errors:
+ 0     : Bad version                    0     : Bad checksum
+ 0     : Bad area id                    0     : Bad authentication type
+ 0     : Bad authentication key         0     : Unknown neighbor
+ 0     : Bad net segment                0     : Extern option mismatch
+ 0     : Router id confusion
+
+HELLO packet errors:
+ 0     : Netmask mismatch               0     : Hello timer mismatch
+ 0     : Dead timer mismatch            0     : Invalid Source Address
+
+......<略>
+
+由以上输出结果可知：AR29没有接收到任何OSPF错误报文但是两者OSPF邻居没有正常建立，初步推断AR29并未正常接收到任何OSPF报文，
+
+由于OSPF报文网络层基于IP协议，进一步检查AR29与AR28直连接口网络层连通性存在故障。
+
+2.7 检查两者直连接口网络层连通性
+
+通过2.4和2.5的输出结果判断AR29接口地址为10.5.128.29、AR28接口地址为10.5.128.28，两者接口IP地址配置正确且在相同网段。
+
+在AR29上用命令ping 10.5.128.28 来测试直连接口网络层是否可达，输出结果如下：
+
+<AR29>ping 10.5.128.28
+  PING 10.5.128.28: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.128.28 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+由以上输出结果可知：AR29与AR28之间直连接口IP地址配置正确，但是不可达，由于AR28和AR9通过LSW6相连，
+
+初步判断故障可能发生在数据链路层，进一步通过检查两者ARP表项判断直连接口是否在同一广播域。
+
+2.8 检查AR29的ARP表
+
+在AR29上检查ARP表，看是否有AR28的IP-MAC的映射关系，输出结果如下所示：
+
+<AR29>display arp
+IP ADDRESS      MAC ADDRESS     EXPIRE(M) TYPE        INTERFACE   VPN-INSTANCE 
+VLAN/CEVLAN PVC                      
+------------------------------------------------------------------------------
+10.5.128.29     00e0-fcc1-1b22            I -         GE0/0/0
+10.5.233.29     00e0-fcc1-1b23            I -         GE0/0/1
+------------------------------------------------------------------------------
+Total:2         Dynamic:0       Static:0     Interface:2 
+
+由以上输出可知AR29的ARP表中并没有AR28 10.5.128.28地址的IP-MAC映射关系，初步判断两者直连接口不在相同广播域，
+
+需要进一步排查是否存在AR29与LSW6直连接口物理层故障导致上述现象。
+
+2.9 检查AR29相关接口收发情况
+
+在AR29上采用两次display interface GigabitEthernet 0/0/0 来检查AR29连接LSW6的接口是否正常，测试及输出结果如下所示：
+
+第一次
+<AR29>display interface GigabitEthernet 0/0/0
+GigabitEthernet0/0/0 current state : UP
+Line protocol current state : UP
+......<略>
+Input:  790 packets, 94010 bytes
+  Unicast:                  0,  Multicast:                 790
+......<略>
+
+第二次
+<AR29>display interface GigabitEthernet 0/0/0
+GigabitEthernet0/0/0 current state : UP
+Line protocol current state : UP
+......<略>
+Input:  804 packets, 95676 bytes
+  Unicast:                  0,  Multicast:                 804
+......<略>
+
+由以上输出结果可知：AR29连接LSW6的接口物理和协议正常，并且两次输出结果中的组播报文在增长（LSW6发送BPDU报文），
+
+所以可以判断接口物理层正常。
+
+2.10  综合分析
+
+综上：AR28、AR29的OSPF配置正常，但是AR29与AR28用于建立OSPF邻居关系的直连接口网络层不可达，排除AR29与LSW6直连接口物理层故障。
+
+所以可以判断故障的根本原因为AR29与AR28用于建立OSPF邻居关系的接口不在同一广播域，LSW6上用于连接AR29与AR28的接口VLAN划分错误。
+
+
+三、解决方案
+
+3.1 将LSW6的接口VLAN划分正确
+
+    LSW6 VLAN划分错误的故障处理需在LSW6上执行以下命令：
+    display port vlan                                               //检查接口VLAN划分结果
+    system-view                                                       //进入系统视图
+    interface Ethernet0/0/3                           	//进入连接AR29的接口视图
+    port link-type access                              	//配置接口为access模式 
+    port default vlan {与AR27 AR28一致的vlanID}         //配置连接AR29的接口vlan与AR27 AR28一致
+
+    执行完成以上命令后在AR29上采用以下命令进行测试：
+    ping  10.5.128.28                                    //测试AR29与AR28用于建立OSPF邻居关系的直连接口网络层连通性
+    display ospf peer brief                             //检查AR29与AR28的OSPF邻居关系
+    display ip routing-table  10.5.1.28           //检查AR29的路由表是否存在AR28的loopback0对应路由
+    ping -a 10.5.1.29 10.5.1.28                       //ping测试环回口连通性验证故障是否解决
+
+    
+3.2 高可能性故障
+
+如果执行以上命令之后，直连接口连通性正常，但是OSPF邻居关系仍然无法建立，则可能存在如下高可能性：
+
+高可能性一：AR29配置错误区域认证密码，与AR27、AR28认证不一致
+
+需要在AR29上执行以下命令：
+    display ospf error interface g0/0/0                      //检查相应接口OSPF错误报文
+    system-view                                                       //进入系统视图
+    ospf 1                          	                              //进入OSPF协议
+    area 0                             	                             //配置OSPF区域0
+    authentication-mode  md5  key-id  cipher key   //修改认证秘钥与AR27、AR8一致
+
+执行完成以上命令后在AR29上采用以下命令进行测试：
+    ping  10.5.128.28                                    //测试AR29与AR28用于建立OSPF邻居关系的直连接口网络层连通性
+    display ospf peer brief                             //检查AR29与AR28的OSPF邻居关系
+    display ip routing-table  10.5.1.28           //检查AR29的路由表是否存在AR28的loopback0对应路由
+    ping -a 10.5.1.29 10.5.1.28                       //ping测试环回口连通性验证故障是否解决
+
+如果执行以上命令之后，OSPF邻居关系可以正常建立，路由器可以相互学习对应路由，但是环回口口仍然无法互访，则可能存在如下高可能性：
+
+高可能性二：LSW6或者AR28上配置了流量过滤策略，需要放行相应流量
+
+  需在LSW6或者AR28设备上执行以下命令：
+    display traffic-filter applied-record             //检测调用了ACL的接口
+    display traffic-policy applied-record           //检测调用了traffic-policy的接口
+    system-view                                                //进入系统视图
+    acl  {对应ACL序号}                                       //修改ACL
+    rule permit source x.x.x.x x.x.x.x                  //放行相应的流量 
+  
+    执行完成以上命令后在AR29上采用以下命令进行测试：
+    ping  10.5.128.28                                    //测试AR29与AR28用于建立OSPF邻居关系的直连接口网络层连通性
+    display ospf peer brief                             //检查AR29与AR28的OSPF邻居关系
+    display ip routing-table  10.5.1.28           //检查AR29的路由表是否存在AR28的loopback0对应路由
+    ping -a 10.5.1.29 10.5.1.28                       //ping测试环回口连通性验证故障是否解决
+
+
+如果故障已排除，需要指导客户保存所有设备配置并提交上述故障排查报告
+       return                                                      //退到用户模式下
+       save                                                        //所有设备保存配置，防止掉电后故障重现
+       y                                                           //确保配置保存
+      
+
+3.3 如果执行以上命令都无法解决问题，则需要用户提供完整的设备配置信息或者派遣一线工程师到达用户现场进行现场排障，同时拨打华为400服务热线请求华为专家的协助，谢谢！
+
+
+
+
+
+
+
+
+
+
+
+

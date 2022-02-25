@@ -1,0 +1,308 @@
+1.网络故障点的根因判断：
+
+网络故障的原因有：
+
+AR29和AR33的末梢区域标识不一致（AR29的末梢区域标识为E，AR33的末梢区域标识为N，即AR33将区域2配置为NSSA区域）
+
+2.分析思路：
+
+2.1 故障现象确认
+
+首先在 AR29 上指定源地址 ping AR33的Loopback0接口地址，验证故障现象，输出结果如下：
+
+	<AR29>ping -a 10.5.1.29 10.5.1.33，
+	PING 10.5.1.33: 56  data bytes, press CTRL_C to break
+	Request time out
+	Request time out
+	Request time out
+	Request time out
+	Request time out
+
+	--- 10.5.1.33 ping statistics ---
+	5 packet(s) transmitted
+	0 packet(s) received
+	100.00% packet loss     
+
+由以上输出可知： AR29的Loopback0的确无法访问AR33的Loopback0，故障真实存在。根据当前故障现象，自上而下分层分析故障原因。
+
+首先，在AR29上查看路由表以确定是否存在AR28的loopback0接口地址对应的路由信息，判断是否存在控制层面故障。
+
+2.2 检查AR29的路由表
+
+造成两者Loopback0接口地址无法互访的原因可能是AR29没有学习到AR33的Loopback0接口地址对应路由。
+
+检查AR29的路由表，判断是否存在控制层面故障，输出结果如下：
+
+	<AR29>display ip routing-table | include 10.5.1.33
+
+		Route Flags: R - relay, D - download to fib
+	------------------------------------------------------------------------------
+	Routing Tables: Public
+        	 Destinations : 11       Routes : 11       
+
+	Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+由以上输出结果可知：AR29路由表中不存在AR33的Loopback0接口地址对应路由，故障发生在控制层面，进一步检查OSPF邻居关系。
+
+2.3 检查AR29的OSPF邻居关系
+
+AR29和AR33启用OSPF协议相互学路由，两者首先需要建立完全邻接关系，所以首先检查AR29的邻居表，结果输出如下：
+
+	<AR29>display ospf peer brief 
+
+	OSPF Process 1 with Router ID 10.5.1.29
+			  Peer Statistic Information
+	----------------------------------------------------------------------------
+ 	Area Id          Interface                        Neighbor id      State    
+	----------------------------------------------------------------------------
+由以上输出结果可知：AR29与AR33无法建立OSPF邻居关系，进一步判断造成邻居关系无法建立的原因。
+
+
+2.4 检查AR29接口是否使能（启用）OSPF
+
+在AR29通过相应命令检查AR29的OSPF配置是否正确，相应接口是否宣告进OSPF，结果输出如下：
+
+<AR29>display  ospf brief                                                //检查AR29的OSPF基本信息
+
+	 OSPF Process 1 with Router ID 10.5.1.29
+		 OSPF Protocol Information
+
+ RouterID: 10.5.1.29        Border Router:  AREA 
+……<略>
+ 
+ Area: 0.0.0.2          (MPLS TE not enabled)
+ Authtype: MD5   Area flag: Normal
+ SPF scheduled Count: 8     
+ ExChange/Loading Neighbors: 0
+ Router ID conflict state: Normal
+ Area interface up count: 2
+
+ Interface: 10.5.233.29 (GigabitEthernet0/0/1)
+ Cost: 1       State: DR        Type: Broadcast    MTU: 1500  
+ Priority: 1
+ Designated Router: 10.5.233.29
+ Backup Designated Router: 0.0.0.0
+ Timers: Hello 10 , Dead 40 , Poll  120 , Retransmit 5 , Transmit Delay 1 
+
+ Interface: 10.5.1.29 (LoopBack0)
+ Cost: 0       State: P-2-P     Type: P2P       MTU: 1500  
+ Timers: Hello 10 , Dead 40 , Poll  120 , Retransmit 5 , Transmit Delay 1 
+<AR29>
+
+由以上输出结果可知：AR29已经正确将GigabitEthernet 0/0/1和Loopback0接口都已经宣告进OSPF的区域2，进一步检查A29和AR33直连接口网络层连通性。
+
+2.5 检查两者直连接口网络层连通性
+
+不能形成邻居关系的原因很多，首先检查AR29与AR33直连接口三层连通性，结果输出如下：
+
+	<AR29>ping 10.5.233.33
+  	PING 10.5.233.33: 56  data bytes, press CTRL_C to break
+   	Reply from 10.5.233.33: bytes=56 Sequence=1 ttl=255 time=30 ms
+   	Reply from 10.5.233.33: bytes=56 Sequence=2 ttl=255 time=40 ms
+    	Reply from 10.5.233.33: bytes=56 Sequence=3 ttl=255 time=20 ms
+    	Reply from 10.5.233.33: bytes=56 Sequence=4 ttl=255 time=40 ms
+    	Reply from 10.5.233.33: bytes=56 Sequence=5 ttl=255 time=50 ms
+
+ 	 --- 10.5.233.33 ping statistics ---
+    	5 packet(s) transmitted
+   	 5 packet(s) received
+    	0.00% packet loss
+   	 round-trip min/avg/max = 20/36/50 ms
+
+由以上输出结果可知：直连接口三层连通性并无问题，需要判断OSPF协议相关配置是否存在问题，进一步检查AR29是否接收到相关OSPF错误报文。
+
+2.6 检查AR29接收OSPF错误报文情况
+
+在AR29上通过display ospf error命令检查接口是否接收到OSPF错误报文，结果输出如下：
+
+	<AR29>display ospf error interface GigabitEthernet0/0/1
+
+	 OSPF Process 1 with Router ID 10.5.1.29
+		 OSPF error statistics 
+
+ 	Interface: GigabitEthernet0/0/1 (10.5.233.29)
+	General packet errors:
+	0     : Bad version                    0     : Bad checksum
+ 	0     : Bad area id                    0     : Bad authentication type
+ 	0     : Bad authentication key         0     : Unknown neighbor
+ 	0     : Bad net segment                90     : Extern option mismatch
+ 	0     : Router id confusion
+
+	HELLO packet errors:
+ 	0     : Netmask mismatch               0   : Hello timer mismatch
+ 	0     : Dead timer mismatch            0     : Invalid Source Address
+
+	DD packet errors:
+ 	0     : MTU option mismatch
+
+	LS REQ packet errors:
+ 	0     : Bad request
+
+	LS UPD packet errors:
+ 	0     : LSA checksum bad
+
+	Receive Grace LSA errors:
+ 	0     : Number of invalid LSAs         0     : Number of policy failed LSAs
+ 	0     : Number of wrong period LSAs
+
+由以上输出结果可知：造成AR29和AR33邻居关系无法建立的原因是两者末梢区域标识不一致，进一步检查具体配置参数，并判断是否存在其他影响邻居关系建立的故障。
+
+
+2.7  检查AR29的OSPF Hello报文详细参数
+
+在 AR29 上通过 debugging 功能检测出具体影响 OSPF 邻居关系建立的参数，输出结果如下：
+
+<AR29>terminal debugging 	
+<AR29>terminal monitor
+<AR29>debugging ospf packet hello interface GigabitEthernet0/0/1
+
+	OSPF 1: RECV Packet. Interface: GigabitEthernet0/0/1				//接收OSPF Hello报文
+
+	Jul  7 2018 10:43:40.397.2-08:00 AR29 RM/6/RMDEBUG:  Source Address: 10.5.233.33
+
+	Jul  7 2018 10:43:40.397.3-08:00 AR29 RM/6/RMDEBUG:  Destination Address: 224.0.0.5
+
+	Jul  7 2018 10:43:40.397.4-08:00 AR29 RM/6/RMDEBUG:  Ver# 2, Type: 1 (Hello)
+
+	Jul  7 2018 10:43:40.397.5-08:00 AR29 RM/6/RMDEBUG:  Length: 44, Router: 10.5.1.33
+
+	Jul  7 2018 10:43:40.397.6-08:00 AR29 RM/6/RMDEBUG:  Area: 0.0.0.2, Chksum: 0
+
+	Jul  7 2018 10:43:40.397.7-08:00 AR29 RM/6/RMDEBUG:  AuType: 02
+
+	Jul  7 2018 10:43:40.397.8-08:00 AR29 RM/6/RMDEBUG:  Key(ascii): * * * * * * * *
+
+	Jul  7 2018 10:43:40.397.9-08:00 AR29 RM/6/RMDEBUG:  Net Mask: 255.255.255.0
+
+	Jul  7 2018 10:43:40.397.10-08:00 AR29 RM/6/RMDEBUG:  Hello Int: 10, Option: _N_                 //AR33的Hello报文末梢区域标识为N
+
+	Jul  7 2018 10:43:40.397.11-08:00 AR29 RM/6/RMDEBUG:  Rtr Priority: 1, Dead Int:40
+
+	Jul  7 2018 10:43:40.397.12-08:00 AR29 RM/6/RMDEBUG:  DR: 10.5.233.33
+
+	Jul  7 2018 10:43:40.397.13-08:00 AR29 RM/6/RMDEBUG:  BDR: 0.0.0.0
+
+	Jul  7 2018 10:43:40.397.14-08:00 AR29 RM/6/RMDEBUG:  # Attached Neighbors: 0
+
+
+ 	OSPF 1: SEND Packet. Interface: GigabitEthernet0/0/1				//发送OSPF Hello报文
+
+	Jul  7 2018 10:43:42.7.2-08:00 AR29 RM/6/RMDEBUG:  Source Address: 10.5.233.29
+
+	Jul  7 2018 10:43:42.7.3-08:00 AR29 RM/6/RMDEBUG:  Destination Address: 224.0.0.5
+
+	Jul  7 2018 10:43:42.7.4-08:00 AR29 RM/6/RMDEBUG:  Ver# 2, Type: 1 (Hello)
+
+	Jul  7 2018 10:43:42.7.5-08:00 AR29 RM/6/RMDEBUG:  Length: 44, Router: 10.5.1.29
+
+	Jul  7 2018 10:43:42.7.6-08:00 AR29 RM/6/RMDEBUG:  Area: 0.0.0.2, Chksum: 0
+
+	Jul  7 2018 10:43:42.7.7-08:00 AR29 RM/6/RMDEBUG:  AuType: 02
+
+	Jul  7 2018 10:43:42.7.8-08:00 AR29 RM/6/RMDEBUG:  Key(ascii): * * * * * * * *
+
+	Jul  7 2018 10:43:42.7.9-08:00 AR29 RM/6/RMDEBUG:  Net Mask: 255.255.255.0
+
+	Jul  7 2018 10:43:42.7.10-08:00 AR29 RM/6/RMDEBUG:  Hello Int: 10, Option: _E_              //AR29的Hello报文末梢区域标识为E    
+
+	Jul  7 2018 10:43:42.7.11-08:00 AR29 RM/6/RMDEBUG:  Rtr Priority: 1, Dead Int: 40              
+
+	Jul  7 2018 10:43:42.7.12-08:00 AR29 RM/6/RMDEBUG:  DR: 10.5.233.29
+
+	Jul  7 2018 10:43:42.7.13-08:00 AR29 RM/6/RMDEBUG:  BDR: 0.0.0.0
+
+	Jul  7 2018 10:43:42.7.14-08:00 AR29 RM/6/RMDEBUG:  # Attached Neighbors: 0
+
+
+由以上输出结果可知：AR29接口可以正常接收发送OSPF Hello报文，可以排除AR33接口未使能OSPF的故障，根据具体参数初步判断初步判断影响两者OSPF邻居建立的原因是：
+
+AR29与AR33的末梢区域标识不一致，不存在其他参数错误。
+
+2.8  检查AR29的流量或路由过滤策略
+
+定位了影响OSPF邻居关系故障原因之后，进一步检查AR29是否存在其他流量或路由过滤策略：
+
+	<AR29>display acl all                                          //检查是否存在ACL
+ 	Total quantity of nonempty ACL number is 0 
+	<AR29>display  ip ip-prefix                                //检查是否IP前缀列表
+                <AR29>display  traffic-policy  applied-record   //检查是否存在流策略
+
+由上面输出结果可知：AR29 上本身没有定义其他流量或路由过滤的策略基本工具，也没有相应流策略，排除存在流量或路由过滤导致的故障。
+
+
+2.9 综合分析
+
+综上：排除AR29的Loopback0、AR29和AR33直连接口未宣告进OSPF的可能，AR29上并不存在路由或流量过滤，所以造成上述故障的原因为：
+
+AR29和AR33的末梢区域标识不一致（AR29的末梢区域标识为E，AR33的末梢区域标识为N，即AR29没有将区域2配置为NSSA区域）
+
+3.解决方案:
+
+3.1 解决方案
+
+将AR29的区域2修改为NSSA区域，使两者末梢区域标识一致，执行如下命令：
+
+     	system-view                              //进入系统视图                          
+     	ospf 1                                        //进入OSPF进程
+       	area 2                                	 //进入区域2
+      	nssa	                              	 //删除末梢区域标识
+
+执行完成以上解决方案后，在AR29上采用以下命令进行测试：
+    display ospf peer brief                             //检查AR29与AR33的OSPF邻居关系
+    display ip routing-table  10.5.1.33           //检查AR29的路由表是否存在AR33的loopback0对应路由
+    ping -a 10.5.1.29 10.5.1.33                       //ping测试环回口连通性验证故障是否解决
+
+3.2 高可能性
+
+如果执行上述解决方案后仍然无法解决故障，则存在如下其他高可能性：
+
+    高可能性一：AR33没有将Loopback0接口宣告进OSPF进程，需要执行如下命令：
+
+     	system-view                             //进入系统视图  
+     	ospf 1                                  //进入OSPF进程下
+      	area 2                                  //进入区域2下
+      	display this	                        //查看是否将Loopback0接口加入到区域2 
+     	 network 10.5.1.33 0.0.0.0              //如果没有加入，那么宣告AR33的Loopback0
+
+
+     高可能性二：AR33的接口下配置ospf filter-lsa-out all命令过滤所有LSA，需要执行如下命令：
+
+    	system-view                            //进入系统视图
+     	interface GigabitEthernet0/0/1         //进入GigabitEthernet0/0/1接口
+      	 display this                          //查看是否配置相应的命令
+      	 undo ospf filter-lsa-out 	       //删除过滤策略
+
+     高可能性三：AR33的OSPF进程下存在相应的路由过滤，则放行相应路由，需要执行如下命令：
+
+     	system-view                             //进入系统视图  
+    	ospf 1                                  //进入OSPF进程下
+     	display this                            //查看是否有路由的过滤策略
+        acl  {对应ACL序号}                      //如果存在ACL进行路由过滤，则修改ACL
+        rule permit source x.x.x.x x.x.x.x      //放行相应的路由
+        ip ip-prefix {前缀列表名} permit x.x.x.x  //如果存在前缀列表进行路由过滤，则修改前缀列表
+        
+
+     高可能性四：AR33的接口下存在流量过滤策略，放行相应的流量，执行如下命令：
+
+     	system-view                            //进入系统视图
+     	interface GigabitEthernet0/0/1         //进入GigabitEthernet0/0/1接口
+      	 display this                          //查看是否有相应的ACL流量过滤策略
+         acl  {对应ACL序号}                      //如果存在ACL进行流量过滤，则修改ACL
+         rule permit source x.x.x.x x.x.x.x      //放行相应的流量
+     	
+
+排除上述高可能性导致故障之后，在AR29上采用以下命令进行测试：
+
+    display ospf peer brief                             //检查AR29与AR33的OSPF邻居关系
+    display ip routing-table  10.5.1.33           //检查AR29的路由表是否存在AR33的loopback0对应路由
+    ping -a 10.5.1.29 10.5.1.33                       //ping测试环回口连通性验证故障是否解决
+
+如果故障已排除，需要指导客户保存所有设备配置并提交上述故障排查报告：
+
+	Return				      //退回用户视图 
+	save				      //保存配置防止设备掉电故障仍然存在
+	y				      //输入Y，确认配置保存 
+
+                                 
+如果执行完上述所有命令后，故障依旧存在，则需要用户提供完整的设备信息或者派遣一线工程师到达用户现场进行排查，同时拨打华为400服务热线请求华为专家的协助，谢谢！
+        

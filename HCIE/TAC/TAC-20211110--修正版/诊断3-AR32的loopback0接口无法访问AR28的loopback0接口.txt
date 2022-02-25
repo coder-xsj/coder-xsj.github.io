@@ -1,0 +1,268 @@
+
+1.网络故障点的根因判断：
+
+网络故障的原因有：
+
+1.1：AR28的接口下使用了 ospf filter-lsa-out summary 命令调用ACL，针对自身loopback0接口地址的3类LSA执行过滤。
+
+1.2：AR28的OSPF区域下使用了 filter 命令调用策略，在区域1入向或者区域0出向针对Loopback0接口地址的3类LSA执行过滤。
+
+1.3：OSPF区域0下使用汇总，且加上not-advertise命令，不通告汇总后的3类LSA。
+
+2.分析思路：
+
+2.1  故障现象确认
+
+首先在 AR32 上指定源地址 ping AR28 的 loopback0 接口地址，验证故障现象，结果输出如下：
+
+<AR32>ping -a 10.5.1.32 10.5.1.28
+  PING 10.5.1.28: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.1.28 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+由以上输出结果可知：AR32的Loopback0接口的确无法访问AR28的Loopback0接口，故障真实存在。根据当前故障现象，自上而下分层分析故障原因。
+
+首先，在AR32上查看路由表以确定是否存在AR28的loopback0接口地址对应的路由信息，判断是否存在控制层面故障。
+
+
+2.2 检查 AR32 的路由表
+
+造成上述故障的原因可能是AR32没有学习到AR28的Loopback0接口地址对应路由。首先检查AR32的路由表，判断是否存在控制层面故障，结果输出如下：
+
+<AR32>display  ip routing-table  protocol ospf     //检查AR32的OSPF路由表
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Public routing table : OSPF
+         Destinations : 2        Routes : 2        
+
+OSPF routing table status : <Active>
+         Destinations : 2        Routes : 2
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+      10.5.1.27/32  OSPF    10   2           D   10.5.232.28     GigabitEthernet0/0/0
+     10.5.128.0/24  OSPF    10   2           D   10.5.232.28     GigabitEthernet0/0/0
+
+OSPF routing table status : <Inactive>
+         Destinations : 0        Routes : 0
+
+由以上输出结果可知：AR32路由表中不存在AR28的Loopback0接口地址路由，故障发生在控制层面。但是AR32路由表中存在下一跳为AR28接口地址的其他OSPF路由条目，
+
+初步判断AR32与AR28已经成功建立OSPF邻居关系，需要进一步检查两者建立基于哪个区域的邻居关系。
+
+2.3 检查AR32的OSPF邻居关系
+
+通过检查AR32的OSPF邻居表，判断AR28和AR32建立基于哪个区域的邻居关系，输出结果如下：
+
+<AR32>display ospf peer brief 
+
+	 OSPF Process 1 with Router ID 10.5.1.32
+		  Peer Statistic Information
+ ----------------------------------------------------------------------------
+ Area Id          Interface                        Neighbor id      State    
+ 0.0.0.1          GigabitEthernet0/0/0             10.5.1.28        Full        
+ ----------------------------------------------------------------------------
+
+由以上输出结果可知：AR32已经与AR28建立了基于区域1的建立完全邻接关系。
+
+如果AR32和AR28邻居关系正常，但是AR32的路由表中并没有学习到AR28的Loopback0接口地址路由，进一步判断是否存在如下故障：
+
+（1）AR28的Loopback0接口没有宣告进OSPF
+
+（2）AR32无法计算AR28的Loopback0接口对应路由
+
+由于AR28无法登录，可以通过检查AR27相关表项判断AR28是否将Loopback0接口宣告进OSPF。
+
+2.4  检查AR27的链路状态数据库
+
+如果AR28上的Loopback0接口正确宣告进OSPF，AR28同步给AR27的1类LSA或者3类LSA中将会包含自身Loopback0 接口地址的路由信息。
+
+在AR27上检查链路状态数据库中由AR28产生的相应LSA，结果输出如下：：
+
+<AR27>display ospf lsdb router originate-router 10.5.1.28	   //查看AR27的链路状态数据库中从AR28学来的1类LSA内容
+	 OSPF Process 1 with Router ID 10.5.1.27
+		         Area: 0.0.0.0
+		 Link State Database 
+  Type      : Router
+  Ls id     : 10.5.1.28
+  Adv rtr   : 10.5.1.28  
+  Ls age    : 1772 
+  Len       : 48 
+  Options   :  ASBR  ABR  E  
+  seq#      : 80000008 
+  chksum    : 0x8cd0
+  Link count: 2
+   * Link ID: 10.5.128.28  
+     Data   : 10.5.128.28  
+     Link Type: TransNet     
+     Metric : 1
+   * Link ID: 10.5.1.28    
+     Data   : 255.255.255.255 
+     Link Type: StubNet      
+     Metric : 0 
+     Priority : Medium
+
+<AR27>display ospf lsdb summary originate-router 10.5.1.28        //查看AR27的链路状态数据库中从AR28学来的3类LSA内容
+	 OSPF Process 1 with Router ID 10.5.1.27
+		         Area: 0.0.0.0
+		 Link State Database 
+  Type      : Sum-Net
+  Ls id     : 10.5.1.32
+  Adv rtr   : 10.5.1.28  
+  Ls age    : 34 
+  Len       : 28 
+  Options   :  E  
+  seq#      : 80000003 
+  chksum    : 0x34c9
+  Net mask  : 255.255.255.255
+  Tos 0  metric: 1
+  Priority  : Medium
+
+  Type      : Sum-Net
+  Ls id     : 10.5.232.0
+  Adv rtr   : 10.5.1.28  
+  Ls age    : 77 
+  Len       : 28 
+  Options   :  E  
+  seq#      : 80000003 
+  chksum    : 0x7eb7
+  Net mask  : 255.255.255.0
+  Tos 0  metric: 1
+  Priority  : Low
+ 
+由以上输出结果可知：
+
+AR27收到AR28产生的1类LSA中包含了AR28的Loopback0接口的路由信息，判断AR28已经将其Loopback0接口宣告进OSPF区域0中；
+
+AR27收到AR28产生的3类LSA中包含了AR32的Loopback0接口的路由信息，判断AR32也将其Loopback0接口宣告进OSPF区域1中
+
+排除相应路由器没有宣告Loopback0接口进入OSPF的故障，进一步检查导致AR32无法计算路由的原因。
+
+
+2.5 检查AR32的链路状态数据库
+
+AR28上的Loopback0接口是宣告进的是区域0，而AR32与AR28建立基于区域1的邻居关系，AR32会通过LSA-3学习到AR28Loopback0接口的路由信息。
+
+在AR32上检查链路状态数据库中由AR28产生的3类LSA，输出结果显示如下：
+
+<AR32>display ospf lsdb summary originate-router 10.5.1.28	//查看AR32的链路状态数据库中从AR28学来的3类LSA内容
+
+	 OSPF Process 1 with Router ID 10.5.1.32
+		         Area: 0.0.0.1
+		 Link State Database 
+  Type      : Sum-Net
+  Ls id     : 10.5.128.0
+  Adv rtr   : 10.5.1.28  
+  Ls age    : 401 
+  Len       : 28 
+  Options   :  E  
+  seq#      : 80000003 
+  chksum    : 0xfaa3
+  Net mask  : 255.255.255.0
+  Tos 0  metric: 1
+  Priority  : Low
+
+  Type      : Sum-Net
+  Ls id     : 10.5.1.27
+  Adv rtr   : 10.5.1.28  
+  Ls age    : 361 
+  Len       : 28 
+  Options   :  E  
+  seq#      : 80000003 
+  chksum    : 0x669c
+  Net mask  : 255.255.255.255
+  Tos 0  metric: 1
+  Priority  : Medium
+
+由以上输出结果可知：AR32的链路状态数据库中并不存在描述AR28的Loopback0接口地址路由信息的3类LSA，初步判断在AR28上执行了相应3类LSA的过滤。
+
+2.6  检查AR32是否执行路由过滤策略
+
+在AR32上检查是否配置路由过滤策略的基本工具，输出结果显示如下：
+
+<AR32>display  acl  all 
+ Total quantity of nonempty ACL number is 0 
+<AR32>display  ip ip-prefix 
+
+由以上输出结果可知：AR32并未配置路由过滤策略，不存在其他导致路由无法计算的故障。
+
+2.7：综合分析
+
+综上所述，AR28和AR32都已经将Loopback0接口宣告进OSPF且两者可以正常建立OSPF完全邻接关系，排除AR32配置路由过滤等其他故障。
+
+参考当前网络环境，针对3类LSA的过滤有如下三种故障可能：
+
+第一种：AR28的接口下使用了 ospf filter-lsa-out summary 命令调用ACL，针对loopback0接口地址的3类LSA执行过滤。
+
+第二种：AR28的OSPF区域下使用了 filter 命令调用策略，在区域1入向或者区域0出向针对Loopback0接口地址的3类LSA执行过滤。
+
+第三种：OSPF区域0下使用汇总，且加上not-advertise命令，不通告汇总后的3类LSA。
+
+
+
+3.解决方案：
+
+3.1 解决方案
+
+（1）删除接口下的ospf filter-lsa-out summary 过滤3类LSA的命令，执行命令如下：
+
+     system-view 	                                              //进入系统视图
+     interface  GigabitEthernet 2/0/0                      //进入接口视图
+     undo ospf filter-lsa-out                                    //删除接口下错误OSPF  LSA过滤
+
+（2）删除OSPF区域下的filter命令，使 AR28 正常发送3类LSA，执行命令如下：
+
+     system-view 	                      //进入系统视图
+     ospf 1                                      //进入OSPF进程
+       area 1                                    //进入OSPF区域1
+       display this                            //查看当前配置信息
+         undo filter import               //删除针对区域1入向的3类LSA过滤  
+       area 0                                   //进入OSPF区域0
+       display this                           //查看当前配置信息
+         undo filter export              //删除针对区域0出向的3类LSA过滤
+
+（3）删除OSPF区域0下错误汇总，使 AR28 正常发送3类LSA，执行命令如下：
+
+     system-view 	                    //进入系统视图
+     ospf 1                                    //进入OSPF进程
+       area 0                                  //进入OSPF区域1
+       display this                          //查看当前配置信息
+         undo abr-summary X.X.X.X x.x.x.x      //删除OSFP区域1下的错误汇总（X.X.X.X代表汇总的网段，x.x.x.x代表汇总网段的掩码）
+
+如果执行上述解决方案后，在AR32上通过如下命令验证故障是否排除：
+
+	display ip routing-table protocol ospf                //检查OSPF路由表是否存在AR28 Loopback0对应路由
+	ping -a 10.5.1.32 10.5.1.28                                 //测试业务地址能否互通
+
+3.2  其他高可能性
+
+如果执行完上述解决方案之后，仍然存在无法互访的故障，则可能存在如下高可能性：
+
+    AR28上存在流量过滤策略，放行相应的流量，修改相关配置
+     system-view 	                             //进入系统视图
+         acl  {对应ACL序号}                        //如果存在ACL进行流量过滤，则修改ACL
+         rule permit source x.x.x.x x.x.x.x   //放行相应的流量
+
+如果执行上述所有操作后，通过如下命令验证故障是否排除：
+
+	display ip routing-table protocol ospf                //检查OSPF路由表是否存在AR28 Loopback0对应路由
+	ping -a 10.5.1.32 10.5.1.28                                 //测试业务地址能否互通
+
+如果故障已排除，需要指导客户保存所有设备配置并提交上述故障排查报告：
+     Return                                    //退回至<Huawei>用户视图
+     save                                      //确认所有设备保存当前配置，防止掉电故障重现
+     y			 //输入y，确认配置保存
+                                 
+如果执行完上述所有命令后，故障依旧存在，则需要用户提供完整的设备信息或者派遣一线工程师到达用户现场进行排查，同时拨打华为400服务热线请求华为专家的协助，谢谢！
+
+
+
+

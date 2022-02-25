@@ -1,0 +1,265 @@
+一、故障根因
+
+AR31 的区域 ID 配置错误（49.0006），需要配置和 AR34 相同的区域 ID（49.0005），两者未建立相同区域的 Level-1 的邻居关系。
+
+二、故障分析
+
+2.1 故障重现
+
+首先通过在 AR32 上通过 display ip routing-table protocol isis 检查是否学习到两条等价默认路由，验证故障现象，输出结果如下：
+
+<AR34>display ip routing-table protocol isis
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Public routing table : ISIS
+         Destinations : 3        Routes : 3        
+
+ISIS routing table status : <Active>
+         Destinations : 3        Routes : 3
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+        0.0.0.0/0   ISIS-L1 15   10          D   10.5.34.30      GigabitEthernet0/0/0
+       10.5.1.30/32  ISIS-L1 15   10          D   10.5.34.30      GigabitEthernet0/0/0
+       10.5.129.0/24  ISIS-L1 15   20          D   10.5.34.30      GigabitEthernet0/0/0
+
+ISIS routing table status : <Inactive>
+         Destinations : 0        Routes : 0
+
+由以上输出结果可知：AR32 中路由表没有学习到两条等价默认路由，只从 AR30 中学习到，故障真实发生，根据故障现象，自上而下分层分析故障原因。
+
+AR28 为 Level-2 设备，AR30、AR31 为 Level-1-2 设备、AR34 为 Level-1 设备，AR34 生成指向 AR31 的默认路由需要 AR34 下发 ATT 置位 1 的 Level-1 的 LSP，检查 AR34 链路状态数据库是否存在。
+
+2.2 检查 AR34 的链路状态数据库
+
+通过 display isis lsdb 检查 AR34 中是否收到相应的 ATT 置位 1 的 LSP，输出结果如下：
+
+<AR34>display isis lsdb 
+
+                        Database information for ISIS(1)
+                        --------------------------------
+
+                          Level-1 Link State Database
+
+LSPID                 Seq Num      Checksum      Holdtime      Length  ATT/P/OL
+-------------------------------------------------------------------------------
+0000.0000.0030.00-00  0x00000006   0x74eb        933           102     1/0/0   // AR30 下发的 ATT 置位的 LSP
+0000.0000.0034.00-00* 0x00000006   0x310c        932           102     0/0/0   
+0000.0000.0034.01-00* 0x00000001   0x8f69        932           55      0/0/0   
+
+Total LSP(s): 3
+    *(In TLV)-Leaking Route, *(By LSPID)-Self LSP, +-Self LSP(Extended), 
+           ATT-Attached, P-Partition, OL-Overload
+
+由以上输出结果可知：AR34 的链路状态数据库中并不存在 AR31 的 LSP，只存在 AR30 下发的 ATT 置位 1 的 LSP，进一步检查邻居关系。
+
+2.3 检查 AR34 的 IS-IS 邻居关系
+
+<AR34>display isis peer 
+
+                          Peer information for ISIS(1)
+
+  System Id     Interface          Circuit Id       State HoldTime Type     PRI
+-------------------------------------------------------------------------------
+0000.0000.0030  GE0/0/0            0000.0000.0034.01 Up   23s      L1       64 
+
+Total Peer(s): 1
+
+由以上输出结果可知：AR34 并未与 AR31 建立相同区域的 Level-1 的邻居关系，不能建立的原因有很多，首先查看相关接口是否开启 IS-IS。
+
+2.4 检查 AR34、AR31 相关接口是否开启 IS-IS 
+
+<AR34>display isis interface GigabitEthernet 0/0/1 
+
+                       Interface information for ISIS(1)
+                       ---------------------------------
+ Interface       Id      IPV4.State          IPV6.State      MTU  Type  DIS   
+ GE0/0/1         002         Up                 Down   
+
+<AR31>display isis interface GigabitEthernet 0/0/1
+
+                       Interface information for ISIS(1)
+                       ---------------------------------
+ Interface       Id      IPV4.State          IPV6.State      MTU  Type  DIS   
+ GE0/0/1         001         Up                 Down         1497 L1/L2 No/No 
+
+由以上输出结果可知，AR34 与 AR31 直连接口都已开启 IS-IS，进一步检查网络层连通性。
+
+2.5 检查两者直连接口网络层连通性
+
+<AR34>ping  10.5.14.31
+  PING 10.5.14.31: 56  data bytes, press CTRL_C to break
+    Reply from 10.5.14.31: bytes=56 Sequence=1 ttl=255 time=90 ms
+    Reply from 10.5.14.31: bytes=56 Sequence=2 ttl=255 time=40 ms
+    Reply from 10.5.14.31: bytes=56 Sequence=3 ttl=255 time=10 ms
+    Reply from 10.5.14.31: bytes=56 Sequence=4 ttl=255 time=20 ms
+    Reply from 10.5.14.31: bytes=56 Sequence=5 ttl=255 time=20 ms
+
+  --- 10.5.14.31 ping statistics ---
+    5 packet(s) transmitted
+    5 packet(s) received
+    0.00% packet loss
+    round-trip min/avg/max = 10/36/90 ms
+
+由以上输出结果可知：两者直连接口网络层连通性正常，进一步检查是否收到 IS-IS 错误报文。
+
+2.6 检查 AR34 接口是否收到错误报文
+
+<AR34>display isis error interface GigabitEthernet 0/0/1
+Statistics of errored packets for GE0/0/1:
+--------------------------------------------------------------------
+LSP packet errors:
+Longer LSP              : 0           Smaller LSP             : 0           
+Mismatched Level        : 0           Invalid Sysid           : 0           
+Zero Sequence Number    : 0           Illegal IS Type         : 0           
+Zero Checksum           : 0           Incorrect Checksum      : 0           
+Bad Authentication      : 0           Bad Auth Count          : 0           
+More Protocol TLV       : 0           Bad Nbr TLV             : 0           
+Bad Extended IS TLV     : 0           Bad IF Addr TLV         : 0           
+Bad Reach TLV           : 0           Bad Inter Domain TLV    : 0           
+Mismatched Area Id(L1)  : 0           Bad TLV Length          : 0          
+Bad Alias TLV           : 0           Bad Area TLV            : 0           
+Bad SRLG TLV            : 0           Unknown Adjacency       : 0           
+Bad Protocol ID         : 0           Bad Version             : 0           
+Zero Lifetime           : 0           Bad Ext Reach TLV       : 0           
+Bad TE Router ID TLV    : 0           Bad TE Sub TLV          : 0           
+
+Hello packet errors:
+Bad Packet Length       : 0           Reserved CircType       : 0           
+Repeated System ID      : 0           Bad Circuit Type        : 0           
+Longer packet           : 0           More Area Addr          : 0           
+Longer Area Addr        : 0           Bad Area Addr TLV       : 0           
+More IF Addr            : 0           Bad Formatted IF TLV    : 0           
+More Nbr SNPA(LAN)      : 0           Invalid Sysid           : 0           
+Bad TLV Length          : 0           Zero HoldingTime        : 0           
+Unusable IP Addr        : 0           Repeated IPv4 Addr      : 0           
+Mismatched Area Addr(L1): 92          Mismatched Proto        : 0           
+SNPA Conflicted(LAN)    : 0           Mismatched Level        : 0           
+Mismatched Max Area Addr: 0           Bad Authentication      : 0           
+More Auth TLV           : 0           3-Way Option Error(P2P) : 0           
+No Area Addr TLV        : 0           Bad Protocol ID         : 0           
+Bad Version             : 0           Invalid IPv6 Addr       : 0           
+More IPv6 IF Addr       : 0           Duplicate IPv6 Addr     : 0           
+More Optional Checksum  : 0           Bad Optional Checksum   : 0           
+--------------------------------------------------------------------
+
+由以上输出结果可知：AR34 与 AR31 无法建立邻居关系的原因是 IS-IS 的区域 ID 不匹配，具体查看AR34、AR31 相应的区域 ID。
+
+2.7 检查 AR34、AR31 的区域 ID
+
+<AR34>display isis lsdb level-1 local verbose	// 查看 AR34 自身的 Level-1 的 LSP
+
+                        Database information for ISIS(1)
+                        --------------------------------
+
+                          Level-1 Link State Database
+
+LSPID                 Seq Num      Checksum      Holdtime      Length  ATT/P/OL
+-------------------------------------------------------------------------------
+0000.0000.0034.00-00* 0x00000007   0x2f0d        885           102     0/0/0   
+ SOURCE       0000.0000.0034.00
+ NLPID        IPV4
+ AREA ADDR    49.0005 	// AR34 的区域 ID 为 49.0005
+ INTF ADDR    10.5.1.34
+ INTF ADDR    10.5.14.34
+ INTF ADDR    10.5.34.34
+ NBR  ID      0000.0000.0034.01  COST: 10        
+ IP-Internal  10.5.1.34       255.255.255.255  COST: 0         
+ IP-Internal  10.5.14.0       255.255.255.0    COST: 10        
+ IP-Internal  10.5.34.0       255.255.255.0    COST: 10        
+
+0000.0000.0034.01-00* 0x00000002   0x8d6a        885           55      0/0/0   
+ SOURCE       0000.0000.0034.01
+ NLPID        IPV4
+ NBR  ID      0000.0000.0034.00  COST: 0         
+ NBR  ID      0000.0000.0030.00  COST: 0         
+
+Total LSP(s): 2
+    *(In TLV)-Leaking Route, *(By LSPID)-Self LSP, +-Self LSP(Extended), 
+           ATT-Attached, P-Partition, OL-Overload
+
+
+<AR31>display isis lsdb level-1 local verbose	// 查看 AR31 自身的 Level-1 的 LSP
+
+                        Database information for ISIS(1)
+                        --------------------------------
+
+                          Level-1 Link State Database
+
+LSPID                 Seq Num      Checksum      Holdtime      Length  ATT/P/OL
+-------------------------------------------------------------------------------
+0000.0000.0031.00-00* 0x00000008   0xf557        801           88      1/0/0   
+ SOURCE       0000.0000.0031.00
+ NLPID        IPV4
+ AREA ADDR    49.0006 		// AR31 的区域 ID 为 49.0006
+ INTF ADDR    10.5.1.31
+ INTF ADDR    10.5.130.31
+ INTF ADDR    10.5.14.31
+ IP-Internal  10.5.1.31       255.255.255.255  COST: 0         
+ IP-Internal  10.5.130.0      255.255.255.0    COST: 10        
+ IP-Internal  10.5.14.0       255.255.255.0    COST: 10        
+
+Total LSP(s): 1
+    *(In TLV)-Leaking Route, *(By LSPID)-Self LSP, +-Self LSP(Extended), 
+           ATT-Attached, P-Partition, OL-Overload
+
+由以上输出结果可知：AR34 的区域 ID 为 49.0005，AR31 的区域 ID 为 49.0006，两者无法建立相同区域的 Level-1 邻居。
+
+查看 AR28 是否 IS-IS 配置是否存在其它错误。
+
+2.8 检查 AR34 的邻居关系
+
+<AR31>display isis peer 
+
+                          Peer information for ISIS(1)
+
+  System Id     Interface          Circuit Id       State HoldTime Type     PRI
+-------------------------------------------------------------------------------
+0000.0000.0028  GE0/0/2            0000.0000.0031.02 Up   20s      L2       64 
+
+Total Peer(s): 1
+
+由以上输出结果可知：AR34 与 AR28 正常建立 Level-2 的邻居关系，可以排除 AR28 的 IS-IS 配置错误。
+
+2.9 综合分析
+
+综上所述，AR34 未收到 AR31 发送的 ATT 置位 1 的 Level-1 的 LSP 的原因是 AR31 的区域 ID 配置错误（49.0006），需要配置和 AR34 相同的区域 ID（49.0005），两者未建立相同区域的 Level-1 的邻居关系，导致 AR31 无法下发 ATT 置位 1 的 Level-1 的 LSP 给 AR34，AR34 从而无法生成下一跳为 AR31 的默认路由。
+
+三、解决方案
+
+3.1 修改 AR31 的区域 ID 为 49.0005，具体命令如下：
+system-view
+isis 1
+    undo network-entity 49.0006.0000.0000.0031.00	// 删除错误 NET 地址
+    network-entity 49.0005.0000.0000.0031.00		// 重新配置 NET 地址
+
+执行完上述命令之后，检查故障是否排除：
+在 AR31 上通过 display isis peer 查看 IS-IS 邻居关系，是否与 AR28 建立不同区域的 Level-2 的邻居。
+在 AR34 上通过 display ip routing-table protocol isis 检查是否存在两条等价默认路由。
+
+3.2 高可能性
+
+如果执行完上述命令后，IS-IS 邻居无法建立，则可能有如下高可能性：
+
+高可能性一：AR34 和 AR31 配置接口认证且认证不一致，具体执行如下命令：
+system-view                           		 // 进入系统视图
+interface  GigabitEthernet 0/0/1    	 // 进入接口视图
+ display this                         		// 查看当前配置信息
+ isis authentication-mode md5 xxx   	// 修改认证方式和认证密码
+
+如果 AR31 的邻居关系正常，但是 AR34 仍然学习不到两条等价的默认路由。
+
+高可能性二：AR31 配置的 ATT 位永不置位
+system-view			// 进入系统视图
+isis 1				// 进入区域视图
+    undo attached-bit advertise 	// 删除永不置位
+
+高可能性三：AR31 配置 next-hop 等价路由的优先级吗，导致两条默认路由无法等价负载
+system-view		// 进入系统视图
+isis 1			// 进入接口视图
+    undo nexthop x.x.x.x	// 删除下一跳权重
+
+执行完以上命令，如果故障得到解决....
+
+
+

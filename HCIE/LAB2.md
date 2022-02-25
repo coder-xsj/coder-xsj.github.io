@@ -13,16 +13,15 @@ IGP --- 有可能这题顺序不一样，有可能放在MPLS VPN，解法一致
 1. CE1,CE2为VPN1的Hub-CE，PE1,PE2为Hub-PE；CE3，CE4为VPN的spoke站点；PE3，PE4为SPOKE-PE
 2. CE4为Multi-VPN-instance CE1，CE4的VPN实例1，通过Ge0/0/1连接PE4。
 3. 合理设置VPN1参数，使得Spoke站点互访的流量必须经过Hub-CE设备。当CE1-PE1链路断开的情况下，PE1仍然可以学习到CE1的业务路
-  由。（PE3上的VPN1的RD为100:13,EXPORT RT为100：1，import RT为200：1）（2）
+    由。（PE3上的VPN1的RD为100:13,EXPORT RT为100：1，import RT为200：1）（2）
 4. 如图4，CE1通过G0/0/1.1和G0/0/1.2建立直接EBGP邻居，接入PE1。CE1通过G0/0/1.2,向PE1通告BGP update中，某些路由信息的AS-path中
-  有200。在CE1上，将OSPF路由导入BGP。（2）--------- `hub-spoke allow-as-loop （PE1、PE2 TOS , RR2 vpnv4）`
+    有200。在CE1上，将OSPF路由导入BGP。（2）--------- `hub-spoke allow-as-loop （PE1、PE2 TOS , RR2 vpnv4）`
 5. CE2通过G0/0/1.1和G0/0/1.2建立直接EBGP邻居，接入PE2。CE2通过G0/0/1.2,向PE2通告BGP update中，某些路由信息的AS-path中有200。
-  在CE2上，将OSPF导入BGP。（2）
+    在CE2上，将OSPF导入BGP。（2）
 6. CE3通过OSPF区域1接入PE3，通过PE3-CE3的逻辑接口互通，通告CE3的各环回口；CE4通过OSPF区域0接入PE4，通过PE4-CE4的Ge0/0/1接口
-  互通，通告CE4的各环回口；（2）
-7. 如图4在AS100，AS200内建立IBGP IPV4邻居关系，RR1是PE1,PE2,P1,ASBR1,ASBR2的反射器，RR2是PE3，PE4，P2，ASBR4的反射
-  器。ASBR1-ASBR3，ASBR2-ASBR4建立EBGP IPV4邻居关系------------`LAB-2没有BGP预配`
-
+    互通，通告CE4的各环回口；（2）
+7. 如图4在AS100，AS200内建立IBGP IPV4邻居关系，RR1是PE1,PE2,P1,ASBR1,ASBR2的反射器，RR2是PE3，PE4，P2，ASBR4的反射器。ASBR1-ASBR3，ASBR2-ASBR4建立EBGP IPV4邻居关系------------`LAB-2没有BGP预配`
+   
 8. 如图3，AS100，AS200内各网元配置MPLS LSR-ID， 全局使能MPLS , MPLS LDP（已配）AS100,AS200内各有直连链路建立LDP邻居（除PE1-RR1之间，其余已配）（1）-------------------------------------------------------------以上需求和LAB1一致，解法一致！！！！
    分析：AS 100的ISIS部署存在路由泄露问题，需要手动将level 2的路由泄露进level 1
 9. ASBR1-ASBR3、ASBR2-ASBR4之间通过直连接口建立EBGP邻居关系。在ASBR上将ISIS的loopback0口引入BGP。
@@ -875,8 +874,6 @@ ip route-static 0.0.0.0 0.0.0.0 100.0.1.2 track nqa admin icmp
 
 1. ISIS-IPv6和如图配置IPv6接口开销值（5分）
 
-
-
 2. AS 100中相邻设备建立PIM IPV6 SM的邻居关系。PE1的E0/0/0静态加入组FF1E::AA。（2分）
 
 > 1. 以 PE1 为例
@@ -995,7 +992,7 @@ pim-ipv6
 
 ```sql
 pim-ipv6
-	c-bsr priority 255
+	c-bsr priority 0
 ```
 
 ASBR2 配置

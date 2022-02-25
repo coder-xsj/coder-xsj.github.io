@@ -19,5 +19,5 @@
 19、组播RP
 20、BGP邻居故障和选路------------------已通过
 
-
+![image-20220213161348656](C:/Users/XuShengjin/AppData/Roaming/Typora/typora-user-images/image-20220213161348656.png)
 

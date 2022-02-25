@@ -1584,7 +1584,9 @@ RR1 也收到了对端的路由了
  *>i    172.16.1.11       172.16.1.5        NULL/1037
 ```
 
-PE1
+> 这里是关键现象
+
+PE1 
 
 ```sql
 [PE1]disp bgp routing-table label 
@@ -1925,11 +1927,13 @@ Route-policy : O2B
   permit : 20 (matched counts: 5)
 ```
 
+##### 7. 奇偶路由选路
+
 11. 在PE3，PE4上修改BGP local-preference属性为120，实现CE3,CE4访问非直接的10.3.x.0/24网段时，
 
-    若X为奇数，PE3，PE4优选的下一跳为 PE1；
+若X为奇数，PE3，PE4优选的下一跳为 PE1；
 
-    若X为偶数，PE3，PE4优选的下一跳为PE2， 不用考虑来回路径是否一致。（3分）
+若X为偶数，PE3，PE4优选的下一跳为PE2， 不用考虑来回路径是否一致。（3分）
 
 PE3、PE4  配置
 
@@ -2692,7 +2696,7 @@ ip ipv6-prefix toASBR3 permit 2000:EAD8:99EF:C03E:B2AD:9EFF:32DD:DC00 120
 ```sql
 bgp 100
 	ipv6-family unicast
-		peer 2570:CCDD:CCBB:3CAF:EFFE:ACDD:CCDB:5700 ipv6-prefix toASBR3 export
+		peer 2570:CCDD:CCBB:3CAF:EFFE:ACDD:CCDB:5700 ipv6-prefix toASBR3 export	
 ```
 
 3. 此时 ASBR3 上查看 --- 此时就只有 汇总路由了
