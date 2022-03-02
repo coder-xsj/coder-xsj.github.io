@@ -21,8 +21,7 @@
 - [19.RSTP](HCIE/论述题/19.RSTP)
 - [20.IGMP Snooping](HCIE/论述题/20.IGMP%20Snooping)
 
-
-#### [lab adn TS]
+#### [lab and TS]
 
 - [LAB1](HCIE/LAB1)
 - [LAB2](HCIE/LAB2)
