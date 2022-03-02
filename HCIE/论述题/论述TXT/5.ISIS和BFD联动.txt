@@ -1,0 +1,35 @@
+题目一：
+一、直连链路物理层故障导致接口 Down 状态
+如果两台路由器直连链路物理层出现故障，出现接口物理层面 down 的情况，IS-IS 可以立即感知到物理故障，这种情况下配置 BFD For IS-IS 不可以缩短链路故障感知时间。
+二、直连链路物理层故障但是接口仍然为 Up 状态
+如果两台设备之间的光信号收发异常，光衰较大，但又未达到接口 down 的阈值，可能会出现大量丢包、错包，延迟较大的情况，根据 IS-IS 网络类型分情况分析如下：
+
+1、广播网络
+通过光纤跳线互联，则数据链路层为以太网，IS-IS 默认网络类型为广播型，广播型网络中部署 BFD 与 IS-IS 联动之后，路由器只会和 DIS 路由器建立 BFD 会话。
+DIS 发送 Hello 报文的频率为 3s，超时时间为 9s，
+BFD 检测间隔为 1s，超时时间为 3s。
+在该场景中，部署 BFD For IS-IS 可以缩短链路故障感知时间。
+
+2、点到点网络
+两台路由器通过跳线互联，建议考虑将接口网络类型修改为点到点网络类型，该网络中不需要选举 DIS，可以避免 DIS 选举等待时间，简化 SPF 计算。
+在点到点网络类型中，IS-IS 路由器发送 Hello 报文频率为 10s，超时时间为 30s，
+BFD 检测间隔为 1s，超时时间为 3s。
+在该场景中，部署 BFD For IS-IS 可以缩短链路故障感知时间。
+
+题目二：
+min-rx-interval 和 min-tx-interval 参数并非越小越好。
+BFD 会话检测时间 = 本端检测倍数 * max（本端最短接收间隔，本端最短发送间隔），若 min-rx-interval 和  min-tx-interval 配置的参数越小，则 BFD 发送报文频率越高，对当前网络感知速度越快，对于不太稳定的链路，如果 BFD 检测时间较小，则 BFD 会话可能会发生震荡，这时可以根据实际网络情况调大 BFD 检测时间。
+结合设备性能、链路质量和部署网络场景综合考虑，主要分为如下两种情况：
+
+情况一：使用 AR 接入路由器部署企业网络
+如果采用 AR 接入路由器部署企业网络，配置 BFD 联动 IS-IS 之后，缺省的 min-rx-interval、mintx-interval 取值为 1s，检测间隔取值为 3，故障感知时间为 3s。
+综合网络拥塞与设备性能的情况下，可以调整企业网络的 min-rx-interval 与 min-tx-interval 为 100ms，以此来实现亚秒级的收敛，配置 IS-IS 与 BFD 联动命令如下：
+isis 1
+  bfd all-interfaces enable	// 开启 IS-IS BFD 功能
+  bfd all-interfaces min-rx-interval 100 min-tx-interval 100  // 修改报文收发间隔为 100ms
+
+情况二：使用 NE 核心路由器部署承载网络
+如果采用 NE 核心路由器部署承载网络，设备主控板带 ES0D00FSUA00 插卡，配置 BFD 联动 IS-IS 之后，缺省的 min-rx-interval 和 min-tx-interval  取值为 10ms，检测间隔取值为 3，故障感知时间为 30ms，可以实现毫秒级别的收敛，配合 FRR 等技术可以完成小于 50ms 的网络收敛。
+需要注意的是：若设备两端配置的收发间隔不一致，则 BFD 会进行协商，以配置间隔较大的一方为准。
+报文的发送周期 = max（本端 min-tx-interval，对端 min-rx-interval）
+报文的接收周期 = max（本端 min-rx-interval，对端 min-tx-interval）
