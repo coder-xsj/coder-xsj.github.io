@@ -1,0 +1,61 @@
+问题一：
+会出现路由黑洞问题导致 Site A 和 Site B 无法互访，分析如下：
+A 和 D 建立 IBGP 邻居，使用 LoopBack 作为更新源，单播发送携带 site 路由的 update 消息给邻居，那么中间沿途的 B、C 只负责转发路由更新，并且没有学习到其中的 site 路由。所以 B、C 上是没有 192.168.1.0/24 和 192.168.2.0/24 的路由条目。
+假设 Site A 访问 Site B，A 收到数据，查看 FIB，将流量沿着物理链路转发给 B，此时 B 上没有路由信息，就会丢包。
+同理 Site B 访问 Site A 一样，数据转发到 C 上，会产生丢包。
+
+问题二：
+方案一：建立 MPLS LSP 转发
+A、B、C、D 上启用 mpls，使用 LDP 协议建立 LDP，因为各设备 LoopBack 已经通过底层 OSPF 互联，可以使用 LoopBack 作为更新源建立 LDP 会话，从而建立 LDP LSP。
+那么 Site A、Site B 之间互访，A、B 可以迭代进 LSP 中，使用 mpls 转发。
+部分配置示例，以 A 为例：
+mpls lsr-id 1.1.1.1
+mpls
+mpls ldp
+#
+interface GigabitEthernetx/x/x	// x/x/x 为 A、B 互联接口编号
+    mpls
+    mpls ldp
+route recursive-lookup tunnel	// 开启路由迭代进隧道功能
+优点：1. 不用改变现网拓扑，转发效率高
+          2. MPLS 以及 MPLS LDP 配置相对简单
+缺点：需要所有公网设备都需要支持 MPLS 协议
+
+方案二：建立 GRE 隧道
+A、D 上使用 LoopBack 作为更新源，建立 GRE 隧道，且使用 tunnel 接口建立 IBGP 连接。
+这样互相学习到的 site 的路由，可以迭代进 GRE 隧道转发。
+具体配置如下：
+A：
+interface tunnel0/0/0
+    ip address 14.1.1.1 30
+    tunnel-protocal gre
+    source 1.1.1.1
+    destination 4.4.4.4
+bgp 100
+    peer 14.1.1.2 as-number 200
+    peer 14.1.1.2 connect-interface Tunnel0/0/0
+
+D：
+interface tunnel0/0/0
+    ip address 14.1.1.2 30
+    tunnel-protocal gre
+    source 4.4.4.4
+    destination 1.1.1.1
+bgp 100
+    peer 14.1.1.1 as-number 200
+    peer 14.1.1.1 connect-interface Tunnel0/0/0
+优点：简单，GRE 通用隧道，兼容性好
+缺点：1. 需要改变 BGP 的逻辑拓扑
+          2. 数据转发增加 GRE 头部和 Tunnel IP 头部，转发效率低
+
+方案三：全网部署 IGBP 全互联
+控制层面将 A、B、C、D 部署 IBGP 全互联，IBGP 对等体存在水平分割等防环手段，因此部署 IBGP 全互联可以保证路由正确传递，该方案可以确保所有路由器上都存在 BGP 路由，从而避免路由黑洞问题。
+为了减少全互联造成的 IBGP 连接数过多，建立 A、B、C、D 之间链型建立 IBGP 连接，且在 B、C 上部署路由反射器，指两端邻居为客户端，让  A、B、C、D 设备都能逐跳学习到 BGP site 路由，中途就没有黑洞。
+具体配置如下，以 B 为例：
+bgp 100
+    peer 1.1.1.1 as-number 100
+    peer 1.1.1.1 connect-interface LoopBack0
+    peer 1.1.1.1 reflect-client		// 指邻居 A 为客户端
+优点：若部署 RR，可以减少 IGBP 对等体数量，降低网络及设备的负担，不需要增加额外成本
+缺点：1. 若没有部署 RR，IBGP 对等体数量较多，占用较高网络资源及设备性能资源
+          2. 若部署 RR，则对 B、C 设备性能要求较高
