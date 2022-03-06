@@ -130,7 +130,7 @@ Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
     0.00% packet loss
     round-trip min/avg/max = 1/1/1 ms
 
-有以上输出结果可知：AR28、AR31、AR34 没有配置基于目的地址为 AR31 的全部接口和 AR34 的 GigabitEthernet 0/0/1 接口地址的流量过滤。
+由以上输出结果可知：AR28、AR31、AR34 没有配置基于目的地址为 AR31 的全部接口和 AR34 的 GigabitEthernet 0/0/1 接口地址的流量过滤。
 
 进一步判断沿途某些设备是否配置了针对源 IP 地址（AR32 的 LoopBack0） 的流量过滤。
 
