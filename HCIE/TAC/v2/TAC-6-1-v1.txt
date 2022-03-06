@@ -44,7 +44,8 @@ Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
 
 由以上输出结果可知：AR32 的路由表中存在 IS-IS 区域相应设备的路由，AR34 的 GigabitEthernet 0/0/1 以及 AR31 的全部接口。
 
-进一步检查 AR31 和 AR34 的路由表，判断是否有回包路由
+进一步检查 AR31 和 AR34 的路由表，判断是否有回包路由。
+
 2.3 检查 AR31 和 AR34 的路由表
 
 <AR31>display ip routing-table 10.5.1.32
@@ -66,7 +67,7 @@ Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
         0.0.0.0/0   ISIS-L1 15   10          D   10.5.234.31     GigabitEthernet0/0/1
                     ISIS-L1 15   10          D   10.5.134.30     GigabitEthernet0/0/0
 
-由以上输出结果可知：AR31 的路由表中存在 AR32 的 LoopBack0 接口地址路由，AR34 的路由表中存在默认路由，说明 AR28 上的双向引入正确无误，初步判断排除控制层面故障，进一步检查数据转发层面是否存在问题。
+由以上输出结果可知：AR31 的路由表中存在 AR32 的 LoopBack0 接口地址路由，AR34 的路由表中存在默认路由，说明 AR28 上的双向引入正确无误，初步判断排除控制层面故障，进一步检查数据转发层面是否存在故障。
 
 2.4 判断是否基于目标 IP 地址的流量过滤
 
@@ -201,7 +202,6 @@ Input:  516 packets, 690651 bytes
 2.7 排查其它设备是否存在流量过滤策略
 
 在 AR31 和 AR34 上进一步检查是否存在流量过滤策略，输出结果如下：
-
 
 <AR31>display  acl all 
  Total quantity of nonempty ACL number is 0 
