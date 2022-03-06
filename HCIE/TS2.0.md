@@ -1951,6 +1951,12 @@ user-interface vty 0 4
 
 看考场图
 
+![image-20220306144821811](https://s2.loli.net/2022/03/06/9FGQxucsNhW3lvC.png)
+
+![image-20220306145044819](https://s2.loli.net/2022/03/06/5BoivNwGLm6xYHa.png)
+
+![image-20220306145137286](https://s2.loli.net/2022/03/06/HOSQXwxARjln8kM.png)
+
 ------
 
 #### 13、IPV6
@@ -2100,7 +2106,7 @@ interface Tunnel0/0/100
 
 所有 IPv6 客户端验证互访即可，如果存在无法互访检查连接客户端对应接口 OSPFv3 是否启用 
 
-IPV6 CLIENT13、IPV6 CLIENT9 、IPV6 CLIENT10 互访成功
+**IPV6 CLIENT13、IPV6 CLIENT9 、IPV6 CLIENT10 互访成功**
 
 <font color='red'>注意：VRRP6 需求中新增 Clinet14 可能无法通信成功，VRRP6 在 ENSP 中有 bug</font>
 
@@ -2376,6 +2382,8 @@ bgp 200
 1. 检查 BGP ipv6 邻居关系
 
    R2、R9  --- 发现没有问题
+
+   R2 - {R7, R4, R5}, R9 - {R4, R5} 建立邻居关系
 
    ```sql
    disp bgp ipv6 peer
