@@ -24,7 +24,7 @@ R3 的 LoopBack0 如题意宣告在 area 1 中，也是由 R4 作为 ABR 产生 
 所以 R2 和 R3 的更新源可达，IBGP 连接正常，路由通告正常。
 R3、R1 之间的 IBGP 邻居，因为题意的链路故障，导致 ospf 不规则区域，让 R3 和 R1 的更新源不可达。
 
-在华为设备中，只有直连 EBGP 邻居且在 BGP 下配置了 ebgp-interface-sensitive 命令（缺省为配置该命令）的前提下，BGP 连接才回在接口下执行 shutdown 后立即断开。
+在华为设备中，只有直连 EBGP 邻居且在 BGP 下配置了 ebgp-interface-sensitive 命令（缺省为配置该命令）的前提下，BGP 连接才会在接口下执行 shutdown 后立即断开。
 若没有配置， R1 - R3 需要等到 holdtime（默认 180s） 超时之后才会检测到故障，邻居才会断开。
 在没有检测到故障之前，邻居依旧正常，路由不变，3min 之后，邻居故障，只剩下一条下一跳地址为 R2 的默认路由。
 
