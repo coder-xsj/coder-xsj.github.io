@@ -382,7 +382,8 @@ interface Pos6/0/0
  ===========Sublinks status begin======
  Pos5/0/0 physical UP,protocol UP
  Pos6/0/0 physical UP,protocol UP
- ===========Sublinks status end========
+
+[CE3]disp int Mp-group 0/0/0
  Physical is MP, baudrate is 310000000 bps # 注意这里带宽叠加了
 ```
 
@@ -782,6 +783,11 @@ isis
  timer lsp-generation 1 50 50  # 最大延迟时间	初始时间	递增时间
  flash-flood	# 快速扩散
  timer spf 1 100 100	# 最大延迟时间	初始时间	递增时间
+ 
+ isis
+ timer lsp-generation 1 50 50 
+ flash-flood	
+ timer spf 1 100 100
 ~~~
 
 
@@ -843,7 +849,9 @@ ip vpn-instance VPN1
 ~~~
 
 ~~~sql
-interface GigabitEthernet0/0/1
+interface GigabitEthernet0/0/1.1
+ dot1q termination vid 1
+ arp broadcast enable
  ip binding vpn-instance VPN1
  ip address 10.3.34.1 255.255.255.0 
 ~~~
@@ -1034,8 +1042,10 @@ ospf 10 vpn-instance VPN1
 ​	配置地址
 
 ```sql
-interface GigabitEthernet0/0/1
-	ip address 10.3.34.2 255.255.255.0 
+interface GigabitEthernet0/0/1.1
+	dot1q termination vid 1
+ 	arp broadcast enable
+	ip address 10.3.34.2 255.255.255.2 
 interface LoopBack0
 	ip address 172.17.1.4 255.255.255.255 
 interface LoopBack1
@@ -1060,7 +1070,9 @@ ospf 10
 ip vpn-instance VPN1
  ipv4-family
   route-distinguisher 100:14
-interface GigabitEthernet0/0/1
+interface GigabitEthernet0/0/1.1
+ 	dot1q termination vid 1
+	arp broadcast enable
 	ip binding vpn-instance VPN1
 	ip address 10.3.34.2 255.255.255.252
 interface LoopBack0

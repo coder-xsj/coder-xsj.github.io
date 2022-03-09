@@ -32,7 +32,7 @@ traffic classifier C1
     if-match acl 2000
 （3）通过流行为指定下一跳为 R2 或者 R5
 traffic behavior B1
-    redirect next-hop x.x.x.x		// x.x.x.x 为 R2 接口 IP 地址
+    redirect next-hop x.x.x.x		// x.x.x.x 为 R2 或 R5 接口 IP 地址
 （4）通过流策略关联流分类和流行为
 traffic policy P1
     classifier C1 behavior B1
