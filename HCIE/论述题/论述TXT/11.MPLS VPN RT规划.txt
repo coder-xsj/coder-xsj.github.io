@@ -1,0 +1,81 @@
+题目一：
+一、视讯业务 VEDIO 的 RT 规划和 VPN 实例配置
+由于 VEDIO 业务只需要分支和总部之间进行通讯，且根据分支 2 的 RT 规划，PE1、PE3 的 RT 规划与 VPN 实例配置如下：
+1、总部 PE1
+ip vpn-instance VEDIO
+    vpn-target 100:101 import-extcommunity
+    vpn-target 100:100 export-extcommunity
+2、分支 1 的 PE1
+ip vpn-instance VEDIO
+    vpn-target 100:100 import-extcommunity
+    vpn-target 100:101 export-extcommunity
+
+二、语音业务 VOIP 的 RT 规划和 VPN 实例配置
+由于 VOIP 业务需要分支互访，此时规划 VOIP 业务需要分为如下场景：
+1、采用 Hub-Spoke 模型
+如果出于安全的考虑，分支之间互访的流量必须经由总部，则可以使用 Hub-Spoke 模型完成需求。
+总部 PE1
+由于采用 Hub-Spoke 模型，此时需要建立两个 VPN 实例：
+ip vpn-instance VOIP-IN
+    vpn-target 200:100 import-extcomunity
+ip vpn-instance VOIP-OUT
+    vpn-target 200:101 export-extcommunity
+
+分支 1 的 PE1
+ip vpn-instance VOIP
+    vpn-target 200:101 import-extcomunity
+    vpn-target 200:100 export-extcommunity
+2、采用 Full-Mesh 全互联模型
+如果分支之间互访的流量不需要经由总部，则可以使用 Full-Mesh 全互联模型完成需求。
+总部 PE1
+ip vpn-instance VOIP
+    vpn-target 200:100 200:101 import-extcomunity
+    vpn-target 200:100 200:101 export-extcommunity
+
+分支 1 的 PE1
+ip vpn-instance VOIP
+    vpn-target 200:100 import-extcomunity
+    vpn-target 200:101 export-extcommunity
+
+题目二：
+考虑到 VOIP、VEDIO 业务可以正常和总部通讯，分支之间无法互访，则可以从控制层面和转发层面两个角度分析故障原因：
+一、路由控制层面
+1、PE 和 CE 之间 VOIP 路由传递故障
+A、PE 和 CE 之间基于 VOIP 实例邻居建立故障
+如果 PE 和 CE 之间运行 OSPF 协议，可以通过 display ospf peer brief 检查邻居关系
+如果 PE 和 CE 之间运行 BGP 协议，可以通过 display bgp peer、display bgp vpnv4 all peer 检查邻居关系
+如果邻居关系建立正常，可以在 PE 设备上通过 display ip routing-table vpn-instance VOIP 检查 CE 路由引入是否正确。
+
+B、PE 设备路由引入故障
+检查分支 2 站点的 PE2 设备基于 VOIP 实例的路由未配置引入
+假设 PE 和 CE 之间运行 OSPF 协议，可以通过 display ip routing-table vpn-instance VOIP、display bgp vpnv4 all routing-table 验证路由双向引入配置。
+假设 PE 和 CE 之间运行 BGP 协议，则可以通过 display bgp vpnv4 all routing-table 验证 CE 设备是否正确发布路由。
+
+C、MCE 场景故障
+如果采用 MCE，则分支 2 的 CE 设备特定 VOIP 实例下需要配置 vpn-instance-capability simple 关闭防环检测，否则因 DN-bit 等防环机制导致 CE 设备无法计算路由。
+
+2、PE 之间 VPNv4 路由传递故障
+（1）IBGP VPNv4 对等体关系建立故障
+如果采用 IBGP 全互联建立对等体，则 PE2 和 PE3 可能存在 VPNv4 对等体关系故障，可以通过 display bgp vpnv4 all peer 检查邻居关系，根据邻居关系停留状态，分析可能故障原因：
+A、邻居关系停留在 Idle 状态，在该场景中可能由于：AS 号配置错误、router-id 冲突或配置了 peer ignore 等原因造成。
+B、邻居关系停留在 no neg 状态，表示 BGP 连接的能力没有协商，一般是 AFI 配置错误。
+C、邻居关系停留在 connect 状态，在该场景中可能由于：PE2 和 PE3 配置了认证，对端未配置或者两者认证密码不一致。
+（2）RR 反射器客户端配置错误
+如果采用 RR 路由反射器，RR 没有指向 PE2 或 PE3 作为反射器客户端也会导致路由无法传递，则需要通过 display cu conf bgp 命令检查路由反射器客户端是否正确配置。
+（2）VPN 实例中存在特定路由过滤
+PE2 和 PE3 上可能因为特定路由过滤导致 VPNv4 路由无法加入相应 VRF 当中，检查 VOIP 是否存在过滤：
+ip vpn-instance VOIP
+    ipv4-family
+        import route-policy Filter
+如果存在过滤策略则需要放行对应路由。
+（4）Hub-Spoke 模型的特殊配置
+如果采用 Hub-Spoke，总部 PE 和 CE 之间运行 BGP，则需要额外配置 allow-as-loop，允许 as 重复，否则导致 PE 路由无法接收。
+
+二、数据转发层面
+1、MPLS LSP 层面
+由于 MPLS VPN 中需要通过 MPLS LSP 保证私网流量可达， 如果底层 MPLS LSP 故障，会导致无法传递路由
+考虑到 VEDIO 业务总部和分支可以互访，如果采用 Hub-Spoke 模型，排除底层 MPLS LSP 故障的可能。
+如果采用全互联，排除 LDP 会话故障，检查分支 2 和分支 1 是否存在对方下一跳地址对应的 FEC，检查是否存在特定 FEC 过滤导致 LSP 无法建立。
+2、业务数据转发层面
+考虑到 VOIP 等语音流量通过 UDP 进行承载的，所以特定路由器针对 UDP 流量的过滤也会导致 VOIP 无法正常通信。
+首先可以利用 ping 测试业务地址连通性，然后利用 display acl all 检查是否存在基于 VOIP 流量过滤，如果存在放行即可。

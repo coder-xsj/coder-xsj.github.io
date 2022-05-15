@@ -1,0 +1,67 @@
+题目一：
+结合当前拓扑，按照自上而下分层进行故障排查，步骤如下：
+一、检查物理层是否存在故障
+通过 display interface brief 检查接口状态是否为 up，display interface GigabitEthernet x/x/x 观察特定接口是否收到错误报文，排查物理层故障。
+如果存在物理层故障可以考虑更换模块、线缆来解决。
+
+二、检查数据链路层是否存在故障
+R2 连接 R4 之间通过以太网直连，并没有经过交换机，可以排除以太网数据链路层故障，而如果 R2 和 R4 通过广域网链路直连，可以通过 display interface brief 观察协议状态是否 up，排查广域网数据链路层故障。
+如果数据链路层广域网协议不匹配则修改为一致即可。
+
+三、检查网络层连通性
+情况一：R2 和 R4 之间通过直连接口建立 EBGP 对等体
+通过 display ip interface brief 观察 R2 和 R4 的直连接口配置是否正确，如果配置正确可以通过 ping 测试直连链路连通性。
+情况二：R2 和 R4 之间通过环回口建立 EBGP 对等体
+这种情况需要保证环回口可达，利用 ping -a source-ip-address -s packetsize host 来检测两端的连通性，指定 source-ip-address 可以同时检测两端路由是否可达，指定 packsize 可以检查大包在链路上传输是否正常，排除 MTU 影响。
+如果无法 ping 通相应地址，则可以进行如下检查：
+1、如果 AS 之间通过静态路由实现环回口可达，可以通过 display ip routing-table protocol static 检查静态路由配置是否正确。
+2、如果 AS 之间通过动态路由实现环回口可达，可以通过 display ip routing-table protocal <路由协议名> 查看是否有对端的环回口地址，然后再检查底层动态路由协议是否配置正确。
+
+
+四、检查 BGP 邻居关系是否存在故障
+1、由于 BGP 是基于 TCP 协议建立对等体关系，可以通过 display tcp status 检查 TCP 状态，验证 TCP 会话建立情况、是否开放相应端口。
+2、在 R2 和 R4 上通过 display bgp peer 观察目前邻居关系停留状态，根据停留状态分析故障原因如下：
+    A、邻居关系停留在 Idle 状态，在该场景中可能由于更新源地址配置错误、AS 号配置错误、router-id 冲突、EBGP 多跳未配置等原因造成。
+    B、邻居关系停留在 no neg 状态，表示 BGP 连接的能力没有协商，一般是 AFI 配置错误。
+    C、邻居关系停留在 connect 状态，在该场景中可能 R2 和 R4 配置了认证，但是密码错误或基于 TCP 179 端口的流量过滤。
+    D、邻居关系停留在 active 状态，在该场景中则可能使用环回口建立 EBGP 对等体但是没有修改更新源。
+3、在 R2 和 R4 上通过 display bgp error 检查是否存在 BGP 错误报文，根据不同的错误信息排查定位故障。
+4、在 R2 和 R4 上通过 display cu conf bgp 查看 BGP 配置，针对 BGP 配置错误修改相应配置。
+
+五、检查是否存在流量过滤行为
+转发层面排除存在基于特定源、目地址的流量过滤行为：
+1、通过 display traffic-filter/traffic-policy applied-record 检查是否存在流量过滤
+2、如果存在流量过滤，通过 display acl all、display ip ip-prefix 检查规则是否配置正确，修改添加相应规则放行流量即可。
+
+问题二：
+由于访问 10.1.1.0/24 优选 R1-R3 之间路径转发，将 R2 和 R4 之间链路作为备份链路，考虑当前网络工程师只能在 AS100 上操作，可以通过如下方案影响选路：
+方案一：修改 MED 属性
+在 R2 上针对 R4 出向配置策略，增加路由 10.1.1.0/24 的 MED 值，使传递给 R4 的 10.1.1.0/24 的 MED 值大，从而 AS200 选择 MED 值较小的路径（R1-R3），具体命令如下：
+1、通过前缀列表匹配特定路由
+ip ip-prefix 10 permit 10.1.1.0 24
+2、配置 route-policy 修改特定路由 MED 属性
+route-policy MED permit node 10
+    if-match ip-prefix 10
+    apply cost 1000			// 修改 MED 值
+route-policy MED permit node 20	// 放行其它路由
+3、R2 出向针对 R4 调用策略
+bgp 100
+    peer x.x.x.x route-policy MED export		// x.x.x.x 为 R4 与 R2 建立 EBGP 对等体使用的 IP 地址
+4、验证：在 AS100 设备上利用 ping -r -a 验证流量回包路由路径是否满足方案。
+ping -r -a 10.1.1.1 x.x.x.x	// x.x.x.x 为 AS200 内路由
+
+方案二：修改 AS-PATH 属性
+在 R2 上针对 R4 出向配置策略，增长路由 10.1.1.0/24 的 AS-PATH 长度，使传递给 R4 的 10.1.1.0/24 的 AS-PATH 较长，从而 AS200 选择 AS-PATH 短的路径（R1-R3），具体命令如下：
+1、通过前缀列表匹配特定路由
+ip ip-prefix 10 permit 10.1.1.0 24
+2、配置 route-policy 修改特定路由 AS-PATH 属性
+route-policy AS permit node 10
+    if-match ip-prefix 10
+    apply as-path 100 100 additive	// 修改 AS-PATH 值
+route-policy AS permit node 20	// 放行其它路由
+3、R2 出向针对 R4 调用策略
+bgp 100
+    peer x.x.x.x route-policy AS export	// x.x.x.x 为 R4 与 R2 建立 EBGP 对等体使用的 IP 地址
+4、验证：在 AS100 设备上利用 ping -r -a 验证流量回包路由路径是否满足方案。
+ping -r -a 10.1.1.1 x.x.x.x	// x.x.x.x 为 AS200 内路由
+

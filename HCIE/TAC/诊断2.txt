@@ -8,7 +8,7 @@ AR29 和 AR33 的 Hello/Dead 时间不一致，AR29 的 Hello/Dead 时间为 10s
 
 在 AR29 使用自身 LoopBack0 接口作为源地址，去 ping AR33 的 LoopBack0 接口地址，判断是否存在故障，输出结果如下：
 
-<AR29>ping -a 10.5.1.29 10.5.1.28
+<AR29>ping -a 10.5.1.29 10.5.1.33
   PING 10.5.1.28: 56  data bytes, press CTRL_C to break
     Request time out
     Request time out
@@ -54,6 +54,8 @@ Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
  0.0.0.0          GigabitEthernet0/0/0             10.5.1.27        Full        
  0.0.0.0          GigabitEthernet0/0/0             10.5.1.28        Full        
  ----------------------------------------------------------------------------
+
+由以上输出结果可知：AR29 并未与 AR33 建立 OSPF 邻居关系，需要进一步检查两者相关接口是否开启的 OSPF。
 
 2.4 检查 AR29 的相关接口是否开启 OSPF 协议
 

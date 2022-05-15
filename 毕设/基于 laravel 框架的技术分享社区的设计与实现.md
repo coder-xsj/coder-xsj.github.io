@@ -30,37 +30,7 @@
 
   
 
-- [ ] 导航栏是否加上**搜索**功能
-
-  ElasticSearch 
-
-  小项目的话 meilisearch 够了 ES 太重
-
-- [ ] 个人中心 --- 关注 --- 话题 --- 评论数量
-
-- [ ] 帖子点赞  --- coffeephp 动画
-
-- [ ] 评论点赞 和 @
-
-- [ ] 帖子内关注功能
-
-- [ ] 最新和热门
-
-- [ ] 第三方登录（QQ，微信）
-
-- [ ] 考虑换个后台模板，用 Dcat-admin --- 但后台功能要重写，工作量有些大
-
-  https://gitee.com/jqhph/dcat-admin
-  
-- [ ] 帖子内目录功能
-
-  参考掘金 --- https://segmentfault.com/a/1190000040942905
-
-- [ ] 默认头像
-
-  https://en.gravatar.com/
-
-- [ ] 评论 `禁词` 过滤
+- [ ]  
 
 - [ ] 
 

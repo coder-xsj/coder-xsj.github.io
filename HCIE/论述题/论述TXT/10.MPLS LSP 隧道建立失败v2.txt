@@ -1,0 +1,33 @@
+题目一：
+公网建立 MPLS LSP 可以通过静态 LSP 和动态 LDP LSP 方式建立，可以根据不同的建立方式分析故障原因：
+一、静态 LSP 建立故障
+可以通过 display mpls static-lsp verbose 查看静态 LSP 的详细信息，检查 LSP 是否正确建立，如果无法建立，则可能有如下原因：
+1、部分设备未学习到特定路由条目，导致静态 LSP 无法建立，可以通过 display ip routing-table  protocol ospf 查看底层 IGP 路由表。
+2、部分接口未开启 MPLS，导致静态 LSP 显示为 down。
+3、部分设备静态 LSP 配置错误，注意当前网络类型为以太网，静态 LSP 必须配置下一跳。
+4、部分设备静态 LSP 配置错误，对于 Transit 节点和 Egress 节点，上游设备的出标签和自身的入标签需要保持一致。
+
+二、动态 LDP 故障
+可以通过 display mpls lsp 检查 LDP LSP 是否正确建立且完成，如果没有，则可能有如下故障原因：
+1、LDP 会话建立故障
+可以通过 display mpls ldp peer 检查传输地址是否配置正确，display mpls ldp session 检查 LDP 会话是否正确建立，如果无法建立，则可能有如下原因：
+A、LSR-ID 配置错误
+建议配置环回口作为 MPLS LSR-ID，如果 MPLS LSR-ID 配置错误，则可能无法建立 LDP 会话。
+B、底层 IGP 故障导致无法学习到传输地址
+如果底层 IGP 故障导致部分设备无法学习到特定公网路由（传输地址），LDP 会话通过传输地址建立，需要 IGP 实现可达，若不可达，也会导致 LDP 会话无法建立，可以通过 display ip routing-table  protocol ospf 查看底层 IGP 路由表。
+C、未开启 MPLS/MPLS LDP
+某些设备系统视图或接口视图未开启 MPLS/MPLS LDP，也会导致 LDP 会话建立故障，可以通过 display mpls interface、display mpls ldp interface 检查接口是否开启。
+D、标签通告方式不一致
+如果标签通告不一致，也会导致 LDP 会话建立故障，DU 下游主动和 DOD 下游按需的标签通告方式无法建立 LDP 会话，可以通过 display mpls ldp session 检查会话是否建立，通过 display mpls ldp interface 检查相关配置。
+
+2、标签分发故障
+A、非 /32 位主机路由
+部分设备环回口未配置为 /32 位，华为设备默认情况下只会为 /32 位主机路由分配并通告标签。
+B、错误汇总
+如果底层 IGP 部署为多区域的 OSPF，在 ABR 上执行汇总也会导致 LDP 会话无法建立，可以通过跨域扩展 longest-match 解决。
+C、存在特定 FEC 的过滤
+如果存在 lsp-trigger 等命令匹配前缀列表对特定 FEC 进行过滤，也会导致 LDP 会话无法建立。
+
+题目二：
+
+

@@ -1,0 +1,62 @@
+问题一：
+一、根据认证方式不同，IS-IS 认证分为：
+1、明文认证：简单的认证方式，将配置的密码直接加入到报文当中，安全性较低
+2、MD5 认证：通过将配置的密码进行 MD5 算法加密之后在加入报文中，相对更为安全
+3、KeyChain 认证：可以实现配置随时间变化的密码链来进一步提升网络的安全性。
+二、根据携带认证 TLV 字段的报文类型不同，IS-IS 认证分为：
+1、接口认证
+2、Area 区域认证
+3、Domain 域认证
+上述认证方式在不同类型的报文中携带了类型为 10 的认证 TLV，实现了不同场景的安全认证，主要区别如下：
+1、接口认证
+接口认证将认证 TLV 封装在 IIH 消息中，可以通过命令指定 Level-1 或 Level-2 的 Hello 报文中携带认证 TLV，如果接口认证不通过，会影响当前链路上路由器的 IS-IS 邻居关系建立。
+2、Area 区域认证
+区域认证将认证 TLV 封装在 Level-1 的 SNP 和 LSP 消息中，IS-IS 网络中所有 Level-1 路由器工作在相同区域内，如果区域认证不通过会导致路由器无法接收相应的 Level-1 的 SNP 的 LSP 消息，不会影响 Level-1 路由器邻居关系建立，但是会导致 Level-1 的链路状态数据库无法同步，从而无法计算路由。
+3、Domain 域认证
+域认证将认证 TLV 封装在 Level-2 的 SNP 和  LSP 消息中， IS-IS 网络中所有的 Level-2 路由器组成了骨干网络，如果域认证不通过，会导致路由无法接收相应 Level-2 的 SNP 和 LSP 消息，不会影响 Level-2 路由器邻居关系建立，但是会导致 Level-2 的链路状态数据库无法同步，从而无法计算路由。
+需要注意的是：IS-IS 为单向认证，为开启认证的一端不检查报文中的认证 TLV 字段，而开启的一端必须保证认证通过才能接收。
+
+问题二：
+解决方案：可以利用 all-send-only 关键字完成密码的平滑更换。
+具体解决步骤如下：
+1、目前区域和域认证添加 all-send-only 关键字
+以区域认证为例，所有启用区域认证的路由配置如下：
+isis 1
+    area-authentication-mode md5 Admin@123 all-send-only 	// 添加 all-send-only 关键字
+配置关键字 all-send-only 之后，对发送的 SNP 和 LSP 消息都封装认证信息，不检查收到的 LSP 和 SNP 中的认证 TLV 字段。
+
+2、修改密码并保留 all-send-only 关键字
+isis 1
+    area-authentication-mode md5 Huawei@123 all-send-only 	// 保留 all-send-only 关键字
+修改密码后仍保留 all-send-only 关键字，实现密码的平滑更换，防止密码不一致影响数据库同步，路由计算。
+
+3、检查配置并移除 all-send-only 关键字
+isis 1
+    area-authentication-mode md5 Huawei@123	 	// 移除 all-send-only 关键字
+检查所有相关路由器都已完成上述配置后，移除 all-send-only 关键字，实现密码的平滑更换。
+----------------------------------------------------------------------------------------------------------------
+解决方案：针对接口认证，可以使用 send-only 关键字完成密码的平滑更换。
+具体解决步骤如下：
+1、目前所有接口认证添加 send-only 关键字
+interface GigabitEthernet x/x/x
+    isis authentication-mode md5 cipher Admin@123 send-only	// 添加 send-only 关键字
+添加 send-only 关键字表示仅对发送的 Hello 报文封装认证 TLV 字段，不检查接收的 Hello 报文是否通过了认证。
+
+2、修改密码并保留 send-only 关键字
+interface GigabitEthernet x/x/x
+    isis authentication-mode md5 cipher Huawei@123 send-only	// 保留 send-only 关键字
+修改密码后并保留 send-only 关键字，实现密码的平滑更换，防止密码不一致影响邻居关系。
+
+3、检查配置并移除 send-only 关键字
+interface GigabitEthernet x/x/x
+    isis authentication-mode md5 cipher Huawei@123 	// 移除 send-only 关键字
+检查所有相关路由器都已完成上述配置后，移除 send-only 关键字，完成密码的平滑更换。
+
+问题三：
+1、AR1、AR2 仅能根据 AR3 的 LSP 访问 49.0002 区域
+AR1 和 AR2 作为 Level-1 设备，仅维护本区域内的 Level-1 的链路状态数据库，因此无法获取到其它区域的域间明细路由。
+需要 AR3 作为 Level-1-2 设备下发 ATT 置位 1 的 Level-1 的 LSP，从而生成指向 AR3 的默认路由。
+
+2、AR1 无法通过 SPF 感知到域外拓扑变化且不存在默认路由
+AR1 仅能根据 Level-1 的链路状态数据库计算本区域内的具体拓扑信息，如果 AR3 和 AR4 链路断开，AR1 无法通过 SPF 计算感知到。
+但是由于 AR3 和 AR4 链路断开，AR3 的 Level-2 的链路状态数据库中不存在其它区域的信息，因此会重新下发 ATT 不置位 1 的 Level-1 的 LSP，导致 AR1 无法生成指向 AR3 的默认路由。

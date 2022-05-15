@@ -1,0 +1,42 @@
+根据现网拓扑，对现网概况进行充分调研，确保割接前期的需求分析、风险预案、割接方案得到充分论证，然后根据割接方案进行择期更新。
+考虑到当前场景中需要对 R3 做设备替换，可以采用直接替换或逐步融入的方式进行割接替换，考虑到确保业务不中断，建议采用逐步融入的方式进行割接。
+首先在现网中接入高性能设备 R5，将 R5 与 R1、R2、R4 建立 IS-IS 邻居关系，此时所有路由器都可以转发数据流量，可以通过如下方案使流量不经过 R3：
+方案一：R3 上将过载标识位 overload 置位
+在 R3 上通过 set-overload 命令将 R3 生成的 ISIS LSP 中的 overload 置位，使其它设备，R1、R4 进行 SPF 计算时不经过 R3 进行数据转发，从而暂时将 R3 从现网中隔离开来，设置过载位配置如下：
+isis 1
+    set-overload
+
+方案二：将 R3 直连链路的两端 IS-IS 开销值改大
+通过将 R3 连接 R1、R3 连接 R2、R3 连接 R4 的两端直连链路 IS-IS Cost 改大，修改之后，流量不会经由 R3 进行转发，具体配置命令如下：
+如果 IS-IS 的 Cost-style 为 narrow 模式：
+interface GigabitEthernet x/x/x
+    isis cost 63
+如果 IS-IS 的 Cost-style 为 wide 模式：
+interface GigabitEthernet x/x/x
+    isis cost maximum
+
+方案三：修改 R1、R4 下一跳地址 weight 权重
+R1、R4 互访，流量往返负载分担，此时可以在 R1、R4 上指定下一跳地址为 R2 或 R5 的权重 weight 更高，从而流量经过 R2 或 R5 转发。
+以 R1 为例，配置命令如下：
+isis
+    ip nexthop x.x.x.x weight 1		// x.x.x.x 为 R2 或 R5 的接口地址
+
+方案四：部署路由策略
+可以在 R1、R4 连接各自内网入向部署路由策略，通过 MQC 的配置方式将业务流量转发层面重定向至 R2 或 R5 进行转发，具体配置步骤如下：
+1、使用 acl 匹配业务网段
+acl 2000
+     rule permit source x.x.x.x y.y.y.y	// 根据实际情况匹配业务网段
+2、使用流分类匹配 acl
+traffic classifier C1
+    if-match acl 2000
+3、使用流行为将流量重定向至 R2 或 R5
+traffic behavior CBQ
+    redirect ip next-hop x.x.x.x		// x.x.x.x 为 R2 或 R5 的接口地址
+4、使用流策略关联流分类和流行为
+traffic policy CBQ
+    classifier C1 behavior CBQ
+5、R1、R4 入向调用策略路由
+interface GigabitEthernet x/x/x
+    traffic-policy CBQ inbound
+
+上述方案都可以实现将流量不经由 R3 进行转发，后续进行充分业务测试，测试无误之后，将 R3 从现网中移除，后续按照割接方案对此次割接进行材料提交。

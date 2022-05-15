@@ -1,0 +1,238 @@
+一、故障根因
+
+AR31 的区域配置错误（49.0006），导致无法与 AR34 建立 IS-IS 邻居关系，需要配置和 AR34 相同区域（49.0005）。
+
+二、故障分析
+
+2.1 故障重现
+
+在 AR34 上通过 display ip routing-table protocol isis 检查是否存在两条等价默认路由，验证故障现象，输出结果如下：
+
+<AR34>display ip routing-table protocol isis 
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Public routing table : ISIS
+         Destinations : 3        Routes : 3        
+
+ISIS routing table status : <Active>
+         Destinations : 3        Routes : 3
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+        0.0.0.0/0   ISIS-L1 15   10          D   10.5.34.30      GigabitEthernet0/0/0
+       10.5.1.30/32  ISIS-L1 15   10          D   10.5.34.30      GigabitEthernet0/0/0
+       10.5.129.0/24  ISIS-L1 15   20          D   10.5.34.30      GigabitEthernet0/0/0
+
+ISIS routing table status : <Inactive>
+         Destinations : 0        Routes : 0
+
+由以上输出结果可知：AR34 中只存在下一跳为 AR30 的默认路由，故障真实发生，根据故障现象自上而下分层分析故障原因。
+
+AR34 生成指向 AR31 的默认路由，需要 AR34 作为 Level-1-2 设备下发 ATT 置位 1 的 Level-1 的 LSP 给 AR34，进一步检查 AR34 的链路状态数据库。
+
+2.2 检查 AR34 的链路状态数据库
+
+在 AR34 上通过 disp isis lsdb 检查是否收到 AR34 发送的 ATT 置位 1 的 Level-1 的 LSP，输出结果如下：
+
+<AR34>disp isis lsdb 
+
+                        Database information for ISIS(1)
+                        --------------------------------
+
+                          Level-1 Link State Database
+
+LSPID                 Seq Num      Checksum      Holdtime      Length  ATT/P/OL
+-------------------------------------------------------------------------------
+0000.0000.0030.00-00  0x00000008   0x7ae3        884           102     1/0/0   	// AR30 发送的 Level-1 的 ATT 置位 1 的 LSP
+0000.0000.0034.00-00* 0x00000005   0xf14c        885           102     0/0/0   
+0000.0000.0034.01-00* 0x00000001   0x8f69        885           55      0/0/0   
+
+Total LSP(s): 3
+    *(In TLV)-Leaking Route, *(By LSPID)-Self LSP, +-Self LSP(Extended), 
+           ATT-Attached, P-Partition, OL-Overload
+
+由以上输出结果可知：AR34 的 LSDB 中并未收到 AR34 发送的 Level-1 的 ATT 置位 1 的 LSP，只收到 AR30 发送的，说明 AR28 的 IS-IS 配置正确。
+
+进一步检查 AR34 与 AR31 的 IS-IS 邻居关系。
+
+2.3 检查 AR34 的 IS-IS 邻居关系
+
+在 AR34 上通过 display isis peer 检查是否与 AR31 建立 IS-IS 邻居关系，输出结果如下：
+
+<AR34>display isis peer 
+
+                          Peer information for ISIS(1)
+
+  System Id     Interface          Circuit Id       State HoldTime Type     PRI
+-------------------------------------------------------------------------------
+0000.0000.0030  GE0/0/0            0000.0000.0034.01 Up   24s      L1       64 
+
+Total Peer(s): 1
+
+由以上输出结果可知：AR34 并未与 AR31 建立 IS-IS 邻居关系，进一步检查相关接口是否开启的 IS-IS。
+
+2.4 检查 AR34、AR31 相关接口是否开启的 IS-IS
+
+在 AR34、AR31 上通过 display isis interface 检查相关接口是否开启 IS-IS，输出结果如下：
+
+<AR34>display isis interface GigabitEthernet 0/0/1
+
+                       Interface information for ISIS(1)
+                       ---------------------------------
+ Interface       Id      IPV4.State          IPV6.State      MTU  Type  DIS   
+ GE0/0/1         002         Up                 Down         1497 L1/L2 No/No 
+
+<AR31>display isis interface GigabitEthernet 0/0/1
+
+                       Interface information for ISIS(1)
+                       ---------------------------------
+ Interface       Id      IPV4.State          IPV6.State      MTU  Type  DIS   
+ GE0/0/1         001         Up                 Down         1497 L1/L2 No/No 
+
+由以上输出结果可知：AR34、AR31 直连接口都已开启 IS-IS，进一步检查两者直连接口网络层连通性。
+
+2.5 检查两者直连接口网络层连通性
+
+在 AR34 上通过 ping 命令，检测与 AR31 直连接口网络层连通性，输出结果如下：
+
+<AR34>ping 10.5.14.31
+  PING 10.5.14.31: 56  data bytes, press CTRL_C to break
+    Reply from 10.5.14.31: bytes=56 Sequence=1 ttl=255 time=70 ms
+    Reply from 10.5.14.31: bytes=56 Sequence=2 ttl=255 time=10 ms
+    Reply from 10.5.14.31: bytes=56 Sequence=3 ttl=255 time=30 ms
+    Reply from 10.5.14.31: bytes=56 Sequence=4 ttl=255 time=20 ms
+    Reply from 10.5.14.31: bytes=56 Sequence=5 ttl=255 time=20 ms
+
+  --- 10.5.14.31 ping statistics ---
+    5 packet(s) transmitted
+    5 packet(s) received
+    0.00% packet loss
+    round-trip min/avg/max = 10/30/70 ms
+
+由以上输出结果可知：两者直连接口互通，进一步检查两者直连接口是否收到 IS-IS 错误报文。
+
+2.6 检查 AR31 相关接口是否收到 IS-IS 错误报文
+
+在 AR34 上通过 display isis error interface 命令检查是否收到 IS-IS 错误报文，输出结果如下：
+
+<AR34>display isis error interface GigabitEthernet 0/0/1
+Statistics of errored packets for GE0/0/1:
+--------------------------------------------------------------------
+LSP packet errors:
+Longer LSP              : 0           Smaller LSP             : 0           
+Mismatched Level        : 0           Invalid Sysid           : 0           
+Zero Sequence Number    : 0           Illegal IS Type         : 0           
+Zero Checksum           : 0           Incorrect Checksum      : 0           
+Bad Authentication      : 0           Bad Auth Count          : 0           
+More Protocol TLV       : 0           Bad Nbr TLV             : 0           
+Bad Extended IS TLV     : 0           Bad IF Addr TLV         : 0           
+Bad Reach TLV           : 0           Bad Inter Domain TLV    : 0           
+Mismatched Area Id(L1)  : 0           Bad TLV Length          : 0          
+Bad Alias TLV           : 0           Bad Area TLV            : 0           
+Bad SRLG TLV            : 0           Unknown Adjacency       : 0           
+Bad Protocol ID         : 0           Bad Version             : 0           
+Zero Lifetime           : 0           Bad Ext Reach TLV       : 0           
+Bad TE Router ID TLV    : 0           Bad TE Sub TLV          : 0           
+
+Hello packet errors:
+Bad Packet Length       : 0           Reserved CircType       : 0           
+Repeated System ID      : 0           Bad Circuit Type        : 0           
+Longer packet           : 0           More Area Addr          : 0           
+Longer Area Addr        : 0           Bad Area Addr TLV       : 0           
+More IF Addr            : 0           Bad Formatted IF TLV    : 0           
+More Nbr SNPA(LAN)      : 0           Invalid Sysid           : 0           
+Bad TLV Length          : 0           Zero HoldingTime        : 0           
+Unusable IP Addr        : 0           Repeated IPv4 Addr      : 0           
+Mismatched Area Addr(L1): 99          Mismatched Proto        : 0           
+SNPA Conflicted(LAN)    : 0           Mismatched Level        : 0           
+Mismatched Max Area Addr: 0           Bad Authentication      : 0           
+More Auth TLV           : 0           3-Way Option Error(P2P) : 0           
+No Area Addr TLV        : 0           Bad Protocol ID         : 0           
+Bad Version             : 0           Invalid IPv6 Addr       : 0           
+More IPv6 IF Addr       : 0           Duplicate IPv6 Addr     : 0           
+More Optional Checksum  : 0           Bad Optional Checksum   : 0           
+--------------------------------------------------------------------
+
+由以上输出结果可知：AR34、AR31 两者无法建立 IS-IS 邻居关系的原因是区域不一致，进一步检查两者区域信息。
+
+2.7 检查 AR34、AR31 的区域信息
+
+在 AR34、AR31 上通过 display isis peer verbose 查看两者的区域信息，输出结果如下：
+
+<AR34>display isis peer verbose
+
+                          Peer information for ISIS(1)
+
+  System Id     Interface          Circuit Id       State HoldTime Type     PRI
+-------------------------------------------------------------------------------
+0000.0000.0030  GE0/0/0            0000.0000.0034.01 Up   24s      L1       64 
+
+  MT IDs supported     : 0(UP) 
+  Local MT IDs         : 0 
+  Area Address(es)     : 49.0005 	// 区域为 49.0005
+  Peer IP Address(es)  : 10.5.34.30      
+  Uptime               : 00:17:37
+  Adj Protocol         : IPV4 
+  Restart Capable      : YES
+  Suppressed Adj       : NO
+  Peer System Id       : 0000.0000.0030  
+
+Total Peer(s): 1
+
+<AR31>display isis peer verbose
+
+                          Peer information for ISIS(1)
+
+  System Id     Interface          Circuit Id       State HoldTime Type     PRI
+-------------------------------------------------------------------------------
+0000.0000.0028  GE0/0/2            0000.0000.0031.02 Up   22s      L2       64 
+
+  MT IDs supported     : 0(UP) 
+  Local MT IDs         : 0 
+  Area Address(es)     : 49.0006 	// 区域为 49.0006
+  Peer IP Address(es)  : 10.5.130.28     
+  Uptime               : 00:17:53
+  Adj Protocol         : IPV4 
+  Restart Capable      : YES
+  Suppressed Adj       : NO
+  Peer System Id       : 0000.0000.0028  
+
+Total Peer(s): 1
+
+由以上输出结果可知：AR34 区域为 49.0005，AR31 区域为 49.0006。
+
+2.8 综合分析
+
+综上所述，故障的根本原因为：AR31 的区域配置错误（49.0006），导致无法与 AR34 建立 IS-IS 邻居关系，需要配置和 AR34 相同区域（49.0005）。
+
+三、解决方案
+
+3.1 在 AR31 上修改区域为 49.0005，具体命令如下：
+system-view
+isis 1
+    display this
+    undo network-entity 49.0006.0000.0000.0031.00
+    network-entity 49.0005.0000.0000.0031.00
+
+执行完上述命令之后，可以在 AR34 通过如下命令验证故障是否得到解决：
+display isis peer
+display ip routing-table protocol isis
+
+3.2 高可能性
+
+
+高可能性一：AR34 与 AR31 接口认证密码错误，具体命令如下：
+AR28 与 AR31 配置
+system-view
+interface GigabitEthernet 0/0/2
+    isis authencation-mode md5 cipher huawei@123
+
+高可能性二：AR31 的 IS-IS 进程中配置了 ATT 永不置位命令，解决方案如下：
+system-view
+isis 1
+    undo attached-bit advertise
+
+可能性四：AR31 的 IS-IS 进程中配置下一跳权重，导致无法负载分担
+
+
+

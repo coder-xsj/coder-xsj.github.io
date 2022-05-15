@@ -1,0 +1,43 @@
+问题一：
+MPLS 公网 LSP 建立可以通过静态 LSP 和动态 LDP LSP 的方式建立，根据不同的建立方式故障原因分析如下：
+一、静态 LSP 建立故障
+可以通过 display mpls static-lsp verbose 查看静态 LSP 的详细情况，确定静态 LSP 的配置及状态是否正确，可能存在如下故障：
+1、部分设备未学习到特定公网路由条目，导致 LSP 无法建立，可以通过 disp ip rou pro ospf 查看底层 IGP 路由表
+2、部分接口未开启 MPLS，导致静态 LSP 显示为 Down
+3、部分设备静态 LSP 配置错误，注意当前拓扑网络类型为以太网，静态 LSP 必须指定下一跳
+4、部分设备静态 LSP 配置错误，对于 Transit 节点和 Egress 节点，上游设备的出标签与自身设备的入标签需要保持一致。
+
+二、动态 LDP 故障
+可以通过 display mpls lsp 查看 lsp 是否正确建立且完整，可能存在如下故障：
+1、LDP 会话故障
+通过 display mpls ldp peer 检查传输地址配置，display mpls ldp session 检查会话是否建立，LDP 会话建立故障原因如下：
+A、LSR-ID 配置错误
+建议使用环回口作为 MPLS LSR-ID，如果 MPLS LSR-ID 配置错误，可能导致 LDP 会话无法建立。
+B、底层 IGP 故障导致传输地址不可达
+底层 IGP 存在故障导致传输地址无法学习到，而通常情况下 LDP 会话建立使用传输地址需要 IGP 实现可达，可以通过 display ip routing-table protocol ospf 检查 IGP 路由表
+C、MPLS 或者 MPLS LDP 未开启
+某些设备系统视图或接口视图未开启 MPLS/MPLS LDP，可以通过 display mpls interface 或 display mpls ldp interface 进行检查
+D、标签通告方式不一致
+某些设备标签通告配置不一致也会影响 LDP 会话建立，DU 下游主动和 DOD 下游按需不同的通告方式无法建立 LDP 会话，可以通过 display mpls ldp session 检查会话是否建立、display mpls ldp interface 检查接口配置
+2、标签分发故障
+A、非 /32 位主机路由
+某些设备环回口没有配置为 /32 主机地址，华为设备默认情况下仅会为  IGP 的 /32 位主机路由分配并通告标签。
+B、错误汇总
+如果底层 IGP 采用多区域的 OSPF，在 ABR 执行汇总也会导致 LSP 无法建立，可以通过跨域扩展 longest-match 解决。 
+C、存在特定 FEC 标签分发的过滤
+存在 lsp-trigger 等命令匹配前缀列表不为特定路由分配标签。
+
+题目二：
+ping 和 tracert 作为基于 ICMP 协议的常用故障检测工具，对传统 IP 网络进行连通性及故障定位。
+ping 命令主要通过 ICMP Echo Request 报文和 ICMP Echo Reply 报文完成连通性检测。
+tracert 命令可以显示完整路径并定位故障，工作方式如下：
+源端节点会构造 ICMP Echo Request 报文，目标地址为测试地址，目标端口号 >= 33434，将 IP 头部的 TTL 从 1 开始累加。
+中间节点会向着源节点发送 ICMP TTL 超时错误报文，同时携带自身的接口地址。
+目标节点会向着源节点尕怂 ICMP 端口不可达错误报文，同时携带自身的接口地址。
+传统 ip ping 和 tracert 在 MPLS 故障判断中主要有哪些问题：
+1、只能检测 ip 连通性，而无法检测 LSP 连通性
+在 MPLS网络中，传统 ping 和 tracert 工具都无法检测是 MPLS LSP 是否建立完整，无法完成 MPLS 转发层面的连通性检测。
+2、MPLS 对 TTL 的处理采用 PIPE 管道模式
+管道模式旨在 Ingress 节点和 Egress节点对 IP TTL 做减 1 处理，而不会复制到 MPLS TTL 中，MPLS 转发报文时对 TTL 做单独处理，导致 tracert 节点无法正常工作， ping 可以正常工作但是 TTL 值显示不正确。
+3、中间节点 P 设备可能无法回应 ICMP 响应报文
+在 MPLS VPN 场景中，缺失情况下中间设备收到的 MPLS 报文只包含一层标签，LSR 使用 ip 路由返回 ICMP 响应消息，由于没有私网路由，导致超时的情况，也会导致 tracert 命令无法正常工作。

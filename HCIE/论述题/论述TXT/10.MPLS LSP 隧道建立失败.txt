@@ -1,0 +1,82 @@
+题目一：
+公网 MPLS LSP 可以通过静态 LSP 或动态 LDP LSP 方式建立，通过不同的方式建立分析故障原因：
+一、静态 LSP 建立故障
+可以通过 display mpls static-lsp verbose 查看静态 LSP 的详细信息，检查静态 LSP 的配置是否正确，是否正确建立，则可能有如下故障原因：
+1、部分设备无法学习到特定公网路由，导致无法建立 LSP，可以通过 display ip routing-table protocol ospf 检查 IGP 路由表。
+2、部分接口未开启 MPLS，导致静态 LSP 显示为 down。
+3、部分设备静态 LSP 配置错误，注意当前网络类型为以太网，静态 LSP 必须指定下一跳
+4、部分设备静态 LSP 配置错误，对于 Ingress 节点和 Egress 节点，上游设备出标签和自身设备入标签需要保持一致。
+
+二、动态 LDP 故障
+可以通过 display mpls lsp 查看 ldp lsp 是否建立正确且完成，可能有如下故障：
+1、LDP 会话建立故障
+通过 display mpls ldp peer 检查传输地址是否正确，display mpls ldp session 建立 LDP 会话是否建立，则可能有如下故障：
+A、LSR-ID 配置错误
+建议使用环回口作为 MPLS LSR-ID，如果 MPLS LSR-ID 配置错误，则可能导致 LDP 会话无法建立。
+B、底层 IGP 故障导致传输地址不可达
+如果底层 IGP 故障导致特定公网路由（传输地址）不可达， LDP 会话通过传输地址建立，需要 IGP 实现可达，若不可达，也无法建立 LDP 会话，可以通过 display ip routing-table protocol ospf 检查 IGP 路由表。
+C、MPLS\MPLS LDP 未开启
+某些设备系统视图或接口视图未开启 MPLS/MPLS LDP，也会导致 LDP 会话无法建立，可以通过 display mpls interface 或 display mpls ldp interface 检查是否开启。
+D、标签通告方式不一致
+如果标签通告方式不一致，也会导致 LDP 会话无法建立，DU 下游主动和 DOD 下游按需的通告方式无法建立 LDP 会话，可以通过 display mpls ldp session 检查会话是否建立，display mpls ldp interface 检查接口配置。
+
+2、标签分发故障
+A、非 /32 位主机路由
+如果部分设备环回口未配置 /32 位主机路由，也会导致 LDP 会话无法建立，华为设备默认情况下只会为 /32 位主机路由通告并分发标签。
+B、错误汇总
+如果部署了多区域的 OSPF 方案，ABR 上执行路由汇总也会导致 LDP 会话无法建立，可以通过跨域扩展 longest-match 解决。
+C、针对特定 FEC 的路由过滤
+某些设备存在 lsp-trigger 匹配前缀列表针对特定 FEC 的过滤也会导致 LDP 会话无法建立。
+
+题目二：
+ping 和 tracert 作为基于 IGMP 协议的常用故障检测工具，可以针对传统网络进行连通性检测及故障定位。
+ping 命令主要通过 ICMP Echo Request 请求报文和 ICMP Echo Reply 回应报文完成连通性检测。
+tracert 命令可以显示完整路径并定位故障，工作方式如下：
+1、源端节点会构造 UDP 报文， 目标端口号 >= 33434，目标地址为测试地址，将 IP 头部中的 TTL 从 1 开始累加。
+2、中间节点会向着源节点发送 ICMP TTL 超时错误报文，同时携带自身的接口地址
+3、目标节点会向着源节点发送 ICMP 端口不可达错误报文，同时携带自身的接口地址
+
+传统 ip ping 和 tracert 在 MPLS 故障判断中主要有哪些问题
+1、只能检测 ip 连通性，无法检测 lsp 的连通性
+在 MPLS 网络中，传统 ping 和 tracert 工具都无检查 MPLS LSP 是否建立完整，无法完成 MPLS LSP 转发层面的连通性检测。
+2、MPLS 对 TTL 的处理采用 PIPE 管道模式
+PIPE 管道模式只在 Ingress 节点和 Egress 节点做 IP TTL 减一 处理，而不会复制到 MPLS TTL 中，MPLS 转发过程中对 TTL 单独处理，导致 tracert 无法正常工作，ping 可以正常工作，但 TTL 显示不正确。
+3、中间节点 P 设备无法回应 ICMP 响应报文
+在 MPLS VPN 场景中，缺省情况下，中间设备收到的 MPLS 报文只携带一层标签，LSR 使用 IP 路由返回 ICMP 响应消息，由于没有私网 IP 路由，导致超时的情况，也会导致 tracert 无法正常工作。
+
+题目三：
+一、针对传统 IP Ping 和 Tracert 无法检测 LSP 的连通性问题，可以使用 MPLS Ping 和 MPLS Tracert 命令检测 LSP 的连通性及故障定位。
+MPLS Ping 和 MPLS Tracert 两个工具可以通过 MPLS Echo Request 回显请求报文和 MPLS Echo Reply 回显应答报文检测 LSP 的连通性、完整性。
+两种报文都是基于 UDP 封装的，端口号为 3503。
+1、使用  MPLS Ping 检测 LSP 的连通性
+可以在 Ingress 节点上通过 ping lsp ip x.x.x.x 32 检查 LSP 的连通性，工作过程如下：
+    A、Ingress 节点会构造 MPLS Echo Request 报文压入相应标签发送给 Transit 节点，IP 报文头中的目标地址为 127.0.0.1/8，将 FEC 地址填入 Target-FEC 字段中。
+    B、Transit 节点收到 MPLS Echo Request 报文进行普通 MPLS 转发。
+    C、Egress 节点通过完整的 LSP 收到 MPLS Echo Request 报文，将报文解封装之后会检查 Target-FEC 中的目标 IP 地址是否为自身接口地址，判断是否是该 FEC 的出口地址，则返回正确的  MPLS Eho Reply 报文。
+至此 MPLS Ping 过程结束。
+2、使用 MPLS Tracert 进行 LSP 的故障定位
+可以在 Ingress 节点上通过 tracert lsp ip x.x.x.x 32 定位 LSP 的故障，工作过程如下：
+    A、Ingress 节点会构造 MPLS Echo Request 报文，IP 报文头中的目标地址为 127.0.0.1/8，查找相应的 LSP 压入标签并将 MPLS TTL 设置为 1 发送给 Transit 节点设备，该报文中携带 Target-FEC 字段以及下游映射 TLV 字段。
+    B、Transit 节点收到 MPLS Echo Request 报文，将 MPLS TTL 减 1 为 0 后，TTL 超时，然后继续检查是否存在对应的 FEC 的 LSP，分析下游映射 TLV 中的下一跳地址和出标签是否正确，返回 MPLS Echo Reply 消息并携带 Transit 节点自身包含下一跳和出标签的下游映射 TLV 字段。
+    C、Ingress 节点不断对 TTL 加 1 重复上述过程，直到 Egress 节点收到 MPLS Echo Request 报文。
+    D、Egress 节点检查 Target-FEC 中的目标 IP 地址是否为自身接口地址，如果为自身接口，则返回不带下游 TLV 的 MPLS ECHO Reply 报文。
+至此，MPLS Tracert 过程结束。
+3、通过 MPLS Ping 和 MPLS Tracert 命令发现 LSP 故障之后，可以利用题目 1 中的命令排除定位故障原因，过程简述如下：
+    A、通过 display mpls lsp 检查是否建立相应的 LSP，可以逐设备观察 LSP 标签是否分配正确。
+    B、如果 LSP 无法建立，则考虑 IGP 层面是否正确，可以通过 display ip routing-table protocol ospf 检查 IGP 路由表。
+    C、保证路由表正确，传输地址可达之后，可以通过 display mpls ldp session 检查 LDP 会话是否建立。
+    D、保证相应接口开启 MPLS/MPLS LDP，标签通告原则正确，可以通过 display mpls lsp interface 验证配置。
+    E、排除配置错误路由汇总及标签分发过滤导致 LSP 故障。
+
+二、针对 MPLS 对 TTL 的处理采用 PIPE 管道模式而无法显示完整路径，可以修改 MPLS 报文为 Uniform 统一模式
+配置 MPLS  对 TTL 的处理采用 Uniform 模式，具体命令如下：
+system-view
+   ttl propagate	// 设置 TTL 为 Uniform 模式
+如果出于安全的考虑，需要隐藏 MPLS 骨干网络的结构，则仍然使用 PIPE 管道模式。
+
+三、针对中间节点 P 设备无法回应 ICMP 响应报文，可以配置 MPLS TTL 超时沿 LSP 返回 ICMP 报文，具体命令如下：
+system-view
+    mpls
+        undo ttl expiration pop
+配置上述命令之后，ICMP 响应报文将 LSP 继续传送，到达 LSP 出节点之后，由 Egress 节点将该消息发送给发送者，从而避免中间节点超时问题的情况。
+

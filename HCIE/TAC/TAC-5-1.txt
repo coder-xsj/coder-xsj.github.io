@@ -143,7 +143,7 @@ More IPv6 IF Addr       : 0           Duplicate IPv6 Addr     : 0
 More Optional Checksum  : 0           Bad Optional Checksum   : 0           
 --------------------------------------------------------------------
 
-由以上输出结果可知：AR34 与 AR31 无法建立邻居关系的原因是 IS-IS 的区域 ID 不匹配，具体查看AR34、AR31 相应的区域 ID。
+由以上输出结果可知：AR34 与 AR31 无法建立邻居关系的原因是 IS-IS 的区域 ID 不匹配，具体查看 AR34、AR31 相应的区域 ID。
 
 2.7 检查 AR34、AR31 的区域 ID
 
@@ -254,7 +254,7 @@ system-view			// 进入系统视图
 isis 1				// 进入区域视图
     undo attached-bit advertise 	// 删除永不置位
 
-高可能性三：AR31 配置 next-hop 等价路由的优先级吗，导致两条默认路由无法等价负载
+高可能性三：AR31 配置 next-hop 等价路由的优先级，导致两条默认路由无法等价负载
 system-view		// 进入系统视图
 isis 1			// 进入接口视图
     undo nexthop x.x.x.x	// 删除下一跳权重

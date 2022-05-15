@@ -77,7 +77,7 @@ OSPF routing table status : <Inactive>
 
 由以上输出结果可知：AR32 与 AR28 是基于 AREA 1 建立了完全邻接关系。
 
-此时 AR32 和 AR28 邻居关系正常，但是 AR32 的路由表中并没有学习到 AR28 的 LoopBack0 接口地址路由信息，以此推断发送以下故障：
+此时 AR32 和 AR28 邻居关系正常，但是 AR32 的路由表中并没有学习到 AR28 的 LoopBack0 接口地址路由信息，以此推断可能发生以下故障：
 
 （1）AR28 的 LoopBack0 地址未宣告进 OSPF 中
 
@@ -241,7 +241,7 @@ AR27 在 AR28 发来的 LSA-3 中包含了 AR32 的 LoopBack0 接口地址信息
 
 三、解决方案
 
-（1）AR28 的接口开启了 ospf filter-lsa-out summary 调用 ACL，过滤自身 LoopBack0 接口路由的LSA-3 类，需要在相关接口下删除，具体命令如下：
+（1）AR28 的接口开启了 ospf filter-lsa-out summary 调用 ACL，过滤自身 LoopBack0 接口路由的 LSA-3 类，需要在相关接口下删除，具体命令如下：
 system-view				// 进入系统视图
 intface GigabitEthernet 2/0/0			// 进入接口视图
     display this				// 查看当前接口下配置命令
@@ -275,6 +275,7 @@ ping -a 10.5.1.32 10.5.1.28                                 // 测试业务地�
 
 AR28 上存在流量过滤策略，放行相应的流量，具体命令如下：
 system-view			// 进入系统视图
+display acl all			// 查看 acl 
 acl <对应 ACL 序号>		// 如果存在 ACL 进行流量过滤，则修改 ACL
     rule permit source x.x.x.x x.x.x.x.	// 放行相应的流量
 

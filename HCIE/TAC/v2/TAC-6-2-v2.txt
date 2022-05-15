@@ -1,0 +1,333 @@
+一、故障根因
+
+AR28 的 GigabitEthernet 0/0/2 接口上存在基于源 IP 地址（AR32 的 LoopBack0）的流量过滤行为。
+
+二、故障分析
+
+2.1 故障重现
+
+在 AR32 上以自身 LoopBack0 为源，去 ping IS-IS 区域中设备的所有路由，这里只输出无法访问的，输出结果如下：
+
+<AR32>ping -a 10.5.1.32 10.5.1.31
+  PING 10.5.1.31: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.1.31 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+<AR32>ping -a 10.5.1.32 10.5.1.34
+  PING 10.5.1.34: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.1.34 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+<AR32>ping -a 10.5.1.32 10.5.130.31
+  PING 10.5.130.31: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.130.31 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+<AR32>ping -a 10.5.1.32 10.5.14.31
+  PING 10.5.14.31: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.14.31 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+
+<AR32>ping -a 10.5.1.32 10.5.14.34
+  PING 10.5.14.34: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.14.34 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+由以上输出结果可知：AR32 无法访问 AR31 的所有接口地址以及 AR34 的 GigabitEthernet 0/0/1 和 LoopBack0 接口地址信息，故障真实发生，根据故障现象自上而下分层分析故障原因。
+
+首先，检查 AR32 的路由表中是否存在上述路由信息，判断是否存在控制层面故障。
+
+2.2 检查 AR32 的路由表
+
+在 AR32 上通过 display ip routing-table protocol ospf | include ASE 查看是否存在上述路由信息，输出结果如下：
+
+<AR32>display ip routing-table protocol ospf | include ASE
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Public routing table : OSPF
+         Destinations : 13       Routes : 13       
+
+OSPF routing table status : <Active>
+         Destinations : 13       Routes : 13
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+10.5.1.30/32  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+10.5.1.31/32  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+10.5.1.34/32  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+10.5.14.0/24  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+10.5.34.0/24  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+10.5.129.0/24  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+10.5.130.0/24  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+
+OSPF routing table status : <Inactive>
+         Destinations : 0        Routes : 0
+
+由以上输出结果可知：AR32 的路由表中存在 AR31 的所有接口路由信息，以及 AR34 的 GigabitEthernet0/0/1 和 LoopBack0 接口路由信息。
+
+由于两者互访需要 IS-IS 设备中也要存在回包路由，进一步查看 IS-IS 区域设备路由表中是否存在 AR32 的 LoopBack0 接口的回包路由信息。
+
+2.3 检查 AR31、AR34 的路由表
+
+在 AR31、AR34 通过 display ip routing-table 10.5.1.32 检查是否存在 AR32 的 LoopBack0 的路由信息，输出结果如下：
+
+<AR31>display ip routing-table 10.5.1.32
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Routing Table : Public
+Summary Count : 1
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+      10.5.1.32/32  ISIS-L2 15   74          D   10.5.130.28     GigabitEthernet0/0/2
+
+<AR34>display ip routing-table 10.5.1.32
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Routing Table : Public
+Summary Count : 2
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+        0.0.0.0/0   ISIS-L1 15   10          D   10.5.14.31      GigabitEthernet0/0/1
+                         ISIS-L1 15   10          D   10.5.34.30      GigabitEthernet0/0/0
+
+由以上输出结果可知：AR31 中存在 AR32 的 LoopBack0 路由信息，AR34 中存在两条等价默认路由访问 AR32 的 LoopBack0，说明 AR28 上的双向引入正确无误，初步判断控制层面不存在故障，进一步检查是否存在转发层面故障。
+
+2.4 检查转发层面是否存在故障
+
+转发层面故障原因有很多，首先检查是否存在基于目的 IP 地址的过滤行为，在 AR32 上不指定源地址去 ping 上述路由，输出结果如下：
+
+<AR32>ping 10.5.1.31
+  PING 10.5.1.31: 56  data bytes, press CTRL_C to break
+    Reply from 10.5.1.31: bytes=56 Sequence=1 ttl=254 time=40 ms
+    Reply from 10.5.1.31: bytes=56 Sequence=2 ttl=254 time=30 ms
+    Reply from 10.5.1.31: bytes=56 Sequence=3 ttl=254 time=20 ms
+    Reply from 10.5.1.31: bytes=56 Sequence=4 ttl=254 time=30 ms
+    Reply from 10.5.1.31: bytes=56 Sequence=5 ttl=254 time=30 ms
+
+  --- 10.5.1.31 ping statistics ---
+    5 packet(s) transmitted
+    5 packet(s) received
+    0.00% packet loss
+    round-trip min/avg/max = 20/30/40 ms
+
+<AR32>ping 10.5.1.34
+  PING 10.5.1.34: 56  data bytes, press CTRL_C to break
+    Reply from 10.5.1.34: bytes=56 Sequence=1 ttl=253 time=10 ms
+    Reply from 10.5.1.34: bytes=56 Sequence=2 ttl=253 time=30 ms
+    Reply from 10.5.1.34: bytes=56 Sequence=3 ttl=253 time=30 ms
+    Reply from 10.5.1.34: bytes=56 Sequence=4 ttl=253 time=30 ms
+    Reply from 10.5.1.34: bytes=56 Sequence=5 ttl=253 time=30 ms
+
+  --- 10.5.1.34 ping statistics ---
+    5 packet(s) transmitted
+    5 packet(s) received
+    0.00% packet loss
+    round-trip min/avg/max = 10/26/30 ms
+
+<AR32>ping 10.5.130.31
+  PING 10.5.130.31: 56  data bytes, press CTRL_C to break
+    Reply from 10.5.130.31: bytes=56 Sequence=1 ttl=254 time=30 ms
+    Reply from 10.5.130.31: bytes=56 Sequence=2 ttl=254 time=30 ms
+    Reply from 10.5.130.31: bytes=56 Sequence=3 ttl=254 time=20 ms
+    Reply from 10.5.130.31: bytes=56 Sequence=4 ttl=254 time=30 ms
+    Reply from 10.5.130.31: bytes=56 Sequence=5 ttl=254 time=30 ms
+
+  --- 10.5.130.31 ping statistics ---
+    5 packet(s) transmitted
+    5 packet(s) received
+    0.00% packet loss
+    round-trip min/avg/max = 20/28/30 ms
+
+
+<AR32>ping 10.5.14.31
+  PING 10.5.14.31: 56  data bytes, press CTRL_C to break
+    Reply from 10.5.14.31: bytes=56 Sequence=1 ttl=254 time=30 ms
+    Reply from 10.5.14.31: bytes=56 Sequence=2 ttl=254 time=30 ms
+    Reply from 10.5.14.31: bytes=56 Sequence=3 ttl=254 time=30 ms
+    Reply from 10.5.14.31: bytes=56 Sequence=4 ttl=254 time=20 ms
+    Reply from 10.5.14.31: bytes=56 Sequence=5 ttl=254 time=20 ms
+
+  --- 10.5.14.31 ping statistics ---
+    5 packet(s) transmitted
+    5 packet(s) received
+    0.00% packet loss
+    round-trip min/avg/max = 20/26/30 ms
+
+<AR32>ping 10.5.14.34
+  PING 10.5.14.34: 56  data bytes, press CTRL_C to break
+    Reply from 10.5.14.34: bytes=56 Sequence=1 ttl=253 time=40 ms
+    Reply from 10.5.14.34: bytes=56 Sequence=2 ttl=253 time=30 ms
+    Reply from 10.5.14.34: bytes=56 Sequence=3 ttl=253 time=40 ms
+    Reply from 10.5.14.34: bytes=56 Sequence=4 ttl=253 time=40 ms
+    Reply from 10.5.14.34: bytes=56 Sequence=5 ttl=253 time=40 ms
+
+  --- 10.5.14.34 ping statistics ---
+    5 packet(s) transmitted
+    5 packet(s) received
+    0.00% packet loss
+    round-trip min/avg/max = 30/38/40 ms
+
+由以上输出结果可知：AR31、AR34 中并不存在基于目的 IP 地址的流量过滤行为。
+
+进一步检查是否存在基于源 IP 地址（AR32 的 LoopBack0）的流量过滤行为。
+
+2.5 检查是否基于源 IP 地址的流量过滤行为
+
+在 AR32 上指定自身 LoopBack0 为源地址，去 tracert 上述路由地址，查看是否存在基于源 IP 地址的流量过滤行为，输出结果如下：
+
+<AR32>tracert -a 10.5.1.32 10.5.1.31
+
+ traceroute to  10.5.1.31(10.5.1.31), max hops: 30 ,packet length: 40,press CTRL_C to break 
+
+ 1 10.5.239.28 20 ms  20 ms  30 ms 
+
+ 2  *  *  * 
+	
+<AR32>tracert -a 10.5.1.32 10.5.1.34
+
+ traceroute to  10.5.1.34(10.5.1.34), max hops: 30 ,packet length: 40,press CTRL_C to break 
+
+ 1 10.5.239.28 20 ms  20 ms  10 ms 
+
+ 2  *  *  * 
+
+<AR32>tracert -a 10.5.1.32 10.5.130.31
+
+ traceroute to  10.5.130.31(10.5.130.31), max hops: 30 ,packet length: 40,press CTRL_C to break 
+
+ 1 10.5.239.28 10 ms  20 ms  20 ms 
+
+ 2  *  *  * 
+
+<AR32>tracert -a 10.5.1.32 10.5.14.31
+
+ traceroute to  10.5.14.31(10.5.14.31), max hops: 30 ,packet length: 40,press CTRL_C to break 
+
+ 1 10.5.239.28 20 ms  30 ms  20 ms 
+
+ 2  *  *  * 
+
+<AR32>tracert -a 10.5.1.32 10.5.14.34
+
+ traceroute to  10.5.14.34(10.5.14.34), max hops: 30 ,packet length: 40,press CTRL_C to break 
+
+ 1 10.5.239.28 20 ms  20 ms  20 ms 
+
+ 2  *  *  * 
+
+由以上输出结果可知：AR32 使用 tracert 去访问 AR31 和 AR34 的路由，可以发现报文都是在 AR28 与 AR31 之间出现超时，初步判断 AR28 与 AR31 之间链路基于源 IP 地址（AR32 的 LoopBack0）的流量过滤行为，需要进一步判断是否是哪个接口存在过滤行为。
+
+2.6 检查是否哪个接口存在过滤行为
+
+AR32 以自身 LoopBack0 为源地址，去 ping AR31 的 GigabitEthernet 0/0/2 接口，然后通过 display interface GigabitEthernet 0/0/2 多次观察报文增长情况，输出结果如下：
+
+第一次：
+<AR31>display interface GigabitEthernet 0/0/2
+GigabitEthernet0/0/2 current state : UP
+Line protocol current state : UP
+<略......>
+Input:  241 packets, 284311 bytes
+  Unicast:                 34,  Multicast:                 205
+  Broadcast:                2,  Jumbo:                       0
+  Discard:                  0,  Total Error:                 0
+
+第二次：
+<AR31>display interface GigabitEthernet 0/0/2
+GigabitEthernet0/0/2 current state : UP
+Line protocol current state : UP
+<略......>
+Input:  252 packets, 300965 bytes
+  Unicast:                 34,  Multicast:                 216
+  Broadcast:                2,  Jumbo:                       0
+  Discard:                  0,  Total Error:                 0
+
+由以上输出结果可知：在 AR32 多次 ping 之后，AR31 的 GigabitEthernet 0/0/2 接口的 Unicast 单播报文并未增长，所以推断 AR28 的 GigabitEthernet 0/0/2 接口上存在基于源 IP 地址（AR32 的 LoopBack0）的流量过滤行为。
+
+进一步排除反方向的流量过滤行为。
+
+2.7 排除其它设备否存在流量过滤策略
+
+在 AR31 和 AR34 上进一步检查是否存在其他流量过滤策略，输出结果如下：
+
+<AR31>display  acl all 
+ Total quantity of nonempty ACL number is 0 
+
+<AR34>display  acl all 
+ Total quantity of nonempty ACL number is 0 
+
+
+2.8 检查是否存在方向的流量过滤行为
+
+在 AR34 上以自身 LoopBack0 为源，去 tracert 访问 AR32 的 LoopBack0 接口地址，验证是否存在反方向的流量过滤行为，输出结果如下：
+
+<AR34>tracert -a 10.5.1.34 10.5.1.32
+
+ traceroute to  10.5.1.32(10.5.1.32), max hops: 30 ,packet length: 40,press CTRL_C to break 
+
+ 1 10.5.14.31 10 ms  10 ms  20 ms 
+
+ 2 10.5.130.28 30 ms  10 ms 10.5.129.28 20 ms 
+
+ 3 10.5.239.32 30 ms  40 ms  30 ms 
+
+由以上输出结果可知：IS-IS 区域设备不存在反方向的流量过滤行为。
+
+2.9 综合分析
+
+综上所述：故障的根本原因为：AR28 的 GigabitEthernet 0/0/2 接口上存在基于源 IP 地址（AR32 的 LoopBack0）的流量过滤行为。
+
+三、解决方案
+
+3.1 AR28 放行相应的 ACL 规则，具体命令如下：
+system-view
+display acl all
+acl <对应的 ACL 序号>
+    rule permit source x.x.x.x y.y.y.y	// 放行相应的流量
+
+如果执行完上述命令之后，在 AR32 上 ping 上述地址：
+ping -a 10.5.1.32 10.5.1.31
+ping -a 10.5.1.32 10.5.1.34
+ping -a 10.5.1.32 10.5.130.31
+ping -a 10.5.1.32 10.5.14.31
+ping -a 10.5.1.32 10.5.14.34

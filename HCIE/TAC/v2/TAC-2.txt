@@ -1,0 +1,241 @@
+一、故障根因
+
+故障的根本原因是：AR29 与 AR33 的 Hello/Dead 时间间隔不一致造成无法建立 OSPF 邻居关系，AR29 的 Hello/Dead 时间为 10s/40s，AR33 的 Hello/Dead 时间为 15s/60。
+
+二、故障分析
+
+2.1 故障重现
+
+在 AR29 上以自身 LoopBack0 接口为源，去 ping AR33 的 LoopBack0 接口地址，验证故障现象，输出结果如下：
+
+<AR29>ping -a 10.5.1.29 10.5.1.33
+  PING 10.5.1.33: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.1.33 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+由以上输出结果可知：AR29 的 LoopBack0 接口地址无法访问 AR33 的 LoopBack0 接口地址，故障真实发生，根据故障现象，自上而下分层分析故障原因。
+
+首先，检查 AR33 的路由表中是否存在 AR33 的 LoopBack0 接口地址路由，判断是否存在控制层面故障。
+
+2.2 检查 AR29 的路由表
+
+在 AR29 上通过 display ip routing-table 检查是否存在 AR33 的 LoopBack0 接口地址路由信息，输出结果如下：
+
+<AR29>display ip routing-table | include 10.5.1.33
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Routing Tables: Public
+         Destinations : 21       Routes : 21       
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+由以上输出结果可知：AR29 的路由表中不存在 AR33 的 LoopBack0 接口地址路由，可知故障发生在控制层面。
+
+由于 AR29 与 AR33 之间运行 OSPF 协议，需要进一步检查 OSPF 邻居关系是否正常建立。
+
+2.3 检查 AR29 的 OSPF 邻居关系
+
+在 AR29 上通过 display ospf peer brief 查看是否与 AR33 建立 OSPF 邻居关系，输出结果如下：
+
+<AR29>display ospf peer brief 
+
+	 OSPF Process 1 with Router ID 10.5.1.29
+		  Peer Statistic Information
+ ----------------------------------------------------------------------------
+ Area Id          Interface                        Neighbor id      State    
+ 0.0.0.0          GigabitEthernet0/0/0             10.5.1.28        Full        
+ ----------------------------------------------------------------------------
+
+由以上输出结果可知：AR29 并未与 AR33 建立 OSPF 邻居关系，需要进一步检查两者相关接口是否开启的 OSPF。
+
+2.4 检查 AR29 的相关接口是否开启 OSPF
+
+在 AR29 上通过 display ospf brief 查看相关接口是否开启了 OSPF 协议，输出结果如下：
+
+<AR29>display ospf brief 
+
+	 OSPF Process 1 with Router ID 10.5.1.29
+		 OSPF Protocol Information
+
+ RouterID: 10.5.1.29        Border Router:  AREA 
+<略......>
+Area: 0.0.0.0          (MPLS TE not enabled)
+ Authtype: MD5   Area flag: Normal
+ SPF scheduled Count: 9     
+ ExChange/Loading Neighbors: 0
+ Router ID conflict state: Normal
+ Area interface up count: 1
+
+ Interface: 10.5.128.30 (GigabitEthernet0/0/0)
+ Cost: 1       State: DR        Type: Broadcast    MTU: 1500  
+ Priority: 1
+ Designated Router: 10.5.128.30
+ Backup Designated Router: 10.5.128.28
+ Timers: Hello 10 , Dead 40 , Poll  120 , Retransmit 5 , Transmit Delay 1 
+ 
+ Area: 0.0.0.2          (MPLS TE not enabled)
+ Authtype: MD5   Area flag: Normal
+ SPF scheduled Count: 9     
+ ExChange/Loading Neighbors: 0
+ Router ID conflict state: Normal
+ Area interface up count: 2
+
+ Interface: 10.5.40.30 (GigabitEthernet0/0/1)
+ Cost: 1       State: DR        Type: Broadcast    MTU: 1500  
+ Priority: 1
+ Designated Router: 10.5.40.30
+ Backup Designated Router: 0.0.0.0
+ Timers: Hello 10 , Dead 40 , Poll  120 , Retransmit 5 , Transmit Delay 1 
+
+ Interface: 10.5.1.29 (LoopBack0)
+ Cost: 0       State: P-2-P     Type: P2P       MTU: 1500  
+ Timers: Hello 10 , Dead 40 , Poll  120 , Retransmit 5 , Transmit Delay 1 
+
+由以上输出结果可知：AR29 与 AR33 的直连接口 GigabitEthernet0/0/1 正确宣告进 AREA 2 中、LoopBack0 接口正确的宣告进 AREA 0 区域中。
+
+进一步检查两者直连接口网络层连通性
+
+2.5 检查 AR29 与 AR33 直连接口连通性
+
+在 AR29 上通过 ping 命令检测 AR33 的连通性，输出结果如下：
+
+<AR29>ping 10.5.40.33
+  PING 10.5.40.34: 56  data bytes, press CTRL_C to break
+    Reply from 10.5.40.33: bytes=56 Sequence=1 ttl=255 time=40 ms
+    Reply from 10.5.40.33: bytes=56 Sequence=2 ttl=255 time=20 ms
+    Reply from 10.5.40.33: bytes=56 Sequence=3 ttl=255 time=30 ms
+    Reply from 10.5.40.33: bytes=56 Sequence=4 ttl=255 time=20 ms
+    Reply from 10.5.40.33: bytes=56 Sequence=5 ttl=255 time=20 ms
+
+  --- 10.5.40.33 ping statistics ---
+    5 packet(s) transmitted
+    5 packet(s) received
+    0.00% packet loss
+    round-trip min/avg/max = 20/26/40 ms
+
+由以上输出结果可知：两者直连接口可以互通，进一步查看 AR29 是否收到 OSPF 错误报文。
+
+2.6 检查 AR29 相关接口是否收到 OSPF 错误报文
+
+在 AR29 上通过 display ospf error interface GigabitEthernet 0/0/1 查看是否收到 OSPF 错误报文，输出结果如下：
+
+<AR29>display ospf error interface GigabitEthernet 0/0/1
+
+	 OSPF Process 1 with Router ID 10.5.1.29
+		 OSPF error statistics 
+
+ Interface: GigabitEthernet0/0/1 (10.5.40.30)
+General packet errors:
+ 0     : Bad version                    0     : Bad checksum
+ 0     : Bad area id                    0     : Bad authentication type
+ 0     : Bad authentication key         0     : Unknown neighbor
+ 0     : Bad net segment                0     : Extern option mismatch
+ 0     : Router id confusion
+
+HELLO packet errors:
+ 0     : Netmask mismatch               81    : Hello timer mismatch
+ 0     : Dead timer mismatch            0     : Invalid Source Address
+
+DD packet errors:
+ 0     : MTU option mismatch
+
+LS REQ packet errors:
+ 0     : Bad request
+
+LS UPD packet errors:
+ 0     : LSA checksum bad
+
+Receive Grace LSA errors:
+ 0     : Number of invalid LSAs         0     : Number of policy failed LSAs
+ 0     : Number of wrong period LSAs
+
+由以上输出结果可知：两者无法建立 OSPF 邻居关系的原因是 Hello 时间不一致，进一步检查是否还存在其它参数故障。
+
+2.7 抓包查看 AR29 是否存在其它参数故障
+<AR29>terminal debugging 
+Info: Current terminal debugging is on.
+<AR29>terminal monitor 
+Info: Current terminal monitor is on.
+
+<AR29>debugging ospf packet hello interface GigabitEthernet 0/0/1
+Mar 15 2022 03:21:28.732.1-08:00 AR29 RM/6/RMDEBUG:
+ FileID: 0xd0178025 Line: 559 Level: 0x20
+ OSPF 1: SEND Packet. Interface: GigabitEthernet0/0/1	// 发送 Hello 报文
+Mar 15 2022 03:21:28.732.2-08:00 AR29 RM/6/RMDEBUG:  Source Address: 10.5.40.30
+Mar 15 2022 03:21:28.732.3-08:00 AR29 RM/6/RMDEBUG:  Destination Address: 224.0.0.5
+Mar 15 2022 03:21:28.732.4-08:00 AR29 RM/6/RMDEBUG:  Ver# 2, Type: 1 (Hello)
+Mar 15 2022 03:21:28.732.5-08:00 AR29 RM/6/RMDEBUG:  Length: 44, Router: 10.5.1.29
+Mar 15 2022 03:21:28.732.6-08:00 AR29 RM/6/RMDEBUG:  Area: 0.0.0.2, Chksum: 0
+Mar 15 2022 03:21:28.732.7-08:00 AR29 RM/6/RMDEBUG:  AuType: 02
+Mar 15 2022 03:21:28.732.8-08:00 AR29 RM/6/RMDEBUG:  Key(ascii): * * * * * * * *
+Mar 15 2022 03:21:28.732.9-08:00 AR29 RM/6/RMDEBUG:  Net Mask: 255.255.255.0
+Mar 15 2022 03:21:28.732.10-08:00 AR29 RM/6/RMDEBUG:  Hello Int: 10, Option: _E_	// Hello 为 10 s
+Mar 15 2022 03:21:28.732.11-08:00 AR29 RM/6/RMDEBUG:  Rtr Priority: 1, Dead Int: 40	// Dead 为 40 s
+Mar 15 2022 03:21:28.732.12-08:00 AR29 RM/6/RMDEBUG:  DR: 10.5.40.30
+Mar 15 2022 03:21:28.732.13-08:00 AR29 RM/6/RMDEBUG:  BDR: 0.0.0.0
+Mar 15 2022 03:21:28.732.14-08:00 AR29 RM/6/RMDEBUG:  # Attached Neighbors: 0
+Mar 15 2022 03:21:28.732.15-08:00 AR29 RM/6/RMDEBUG:  
+
+Mar 15 2022 03:21:34.222.1-08:00 AR29 RM/6/RMDEBUG:
+ FileID: 0xd0178024 Line: 2236 Level: 0x20
+ OSPF 1: RECV Packet. Interface: GigabitEthernet0/0/1		// 接收到的 Hello 报文
+Mar 15 2022 03:21:34.222.2-08:00 AR29 RM/6/RMDEBUG:  Source Address: 10.5.40.34
+Mar 15 2022 03:21:34.222.3-08:00 AR29 RM/6/RMDEBUG:  Destination Address: 224.0.0.5
+Mar 15 2022 03:21:34.222.4-08:00 AR29 RM/6/RMDEBUG:  Ver# 2, Type: 1 (Hello)
+Mar 15 2022 03:21:34.222.5-08:00 AR29 RM/6/RMDEBUG:  Length: 44, Router: 10.5.1.33
+Mar 15 2022 03:21:34.222.6-08:00 AR29 RM/6/RMDEBUG:  Area: 0.0.0.2, Chksum: 0
+Mar 15 2022 03:21:34.222.7-08:00 AR29 RM/6/RMDEBUG:  AuType: 02
+Mar 15 2022 03:21:34.222.8-08:00 AR29 RM/6/RMDEBUG:  Key(ascii): * * * * * * * *
+Mar 15 2022 03:21:34.222.9-08:00 AR29 RM/6/RMDEBUG:  Net Mask: 255.255.255.0
+Mar 15 2022 03:21:34.222.10-08:00 AR29 RM/6/RMDEBUG:  Hello Int: 15, Option: _E_	// Hello 为 15 s
+Mar 15 2022 03:21:34.222.11-08:00 AR29 RM/6/RMDEBUG:  Rtr Priority: 1, Dead Int: 60	// Dead 为 60 s
+Mar 15 2022 03:21:34.222.12-08:00 AR29 RM/6/RMDEBUG:  DR: 10.5.40.34
+Mar 15 2022 03:21:34.222.13-08:00 AR29 RM/6/RMDEBUG:  BDR: 0.0.0.0
+Mar 15 2022 03:21:34.222.14-08:00 AR29 RM/6/RMDEBUG:  # Attached Neighbors: 0
+Mar 15 2022 03:21:34.222.15-08:00 AR29 RM/6/RMDEBUG:  
+
+由以上输出结果可知：AR29 接口可以正常接收并发送 OSPF Hello 报文，可以排除 AR33 接口未使能 OSPF 的故障，AR29 与 AR33 之间并不存在其它参数错误，AR29 的 Hello/Dead 时间为 10s/40s，AR33 的 Hello/Dead 时间为 15s/60s。
+
+2.8 检查 AR29 是否存在其它流量或者路由过滤策略
+
+<AR29>display acl all			// 检查是否存在 ACL
+ Total quantity of nonempty ACL number is 0 
+<AR29>display ip ip-prefix			// 检查是否存在 IP 前缀列表
+
+2.9 综合分析
+
+综上所述，故障的根本原因是：AR29 与 AR33 的 Hello/Dead 时间间隔不一致造成无法建立 OSPF 邻居关系，AR29 的 Hello/Dead 时间为 10s/40s，AR33 的 Hello/Dead 时间为 15s/60。
+
+三、解决方案
+
+3.1 将 AR29、AR33 两者直连接口的 Hello/Dead 时间修改为一致即可，具体命令如下：
+system-view
+interface GigabitEthernet0/0/1
+    ospf timer hello 15
+    ospf timer dead 60
+
+执行完上述命令后，可以在 AR29 上通过如下命令进行故障验证：
+display ospf peer brief
+display ip routing-table 10.5.1.33
+ping -a 10.5.1.29 10.5.1.33
+
+3.2 高可能性
+
+如果执行完上述命令之后，OSPF 邻居关系正常建立，但是两者 LoopBack0 接口仍无法互访，则可能有如下高可能性：
+高可能性一：AR33 没有宣告 LoopBack0 进入 OSPF 中，配置命令如下：
+system-view
+ospf 1
+    area 2
+        network 10.5.1.33 0.0.0.0
+
+高可能性二：AR33 的接口配置了 ospf filte-lsa-all 命令，配置命令如下：
+
+

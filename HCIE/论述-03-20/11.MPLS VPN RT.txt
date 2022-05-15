@@ -1,0 +1,27 @@
+问题二：
+考虑到 VEDIO 业务正常，无法实现分支之间 VOIP 互访，可以从控制层面和转发层面两个角度分析故障可能：
+一、路由控制层面
+1、PE 和 CE 之间基于 VOIP 实例的邻居关系出现故障
+
+2、PE 设备路由引入故障
+检查分支 2 站点的 PE2 设备基于 VOIP 实例的路由未配置引入
+
+3、MCE 场景故障
+如果采用 MCE，则分支 2 的 CE 设备特定 VOIP 实例下需要配置 vpn-instance-capobility simple 关闭防环检测，否则因 DN-bit 等防环机制导致 CE 设备无法计算路由。
+
+二、PE 之间传递 VPNv4 路由传递故障
+1、IBGP VPNv4 对等体出现故障
+如果采用 IBGP 全互联对等体，则 PE2 和 PE3 可能存在 VPNv4 对等体关系故障，可以通过 display bgp vpnv4 all peer
+
+2、RR 反射器客户端配置错误
+
+3、VPN 实例中存在特定路由过滤
+import route-policy Filter
+
+4、Hub-Spoke 模型特殊配置
+如果采用 Hub-Spoke，总部 PE 和 CE 之间运行 EBGP，则需要额外配置 allow-as-loop，允许 as 重复，否则导致 PE 设备无法接收。
+
+二、数据转发层面
+由于 MPLS VPN 中需要通过 MPLS LSP 保证私网流量可达，如果底层 MPLS LSP 故障会导致无法传递路由。
+考虑到 VEDIO 业务总部和分支可以正常互访，如果采用 Hub-Spoke 模型，排除底层 MPLS LSP 故障的可能。
+如果采用全互联，排除 LDP 会话故障，检查分支 2 和 分支 1 是否存在对方下一跳地址对应的 FEC，检查是否存在特定 FEC 过滤导致 LSP 无法建立。

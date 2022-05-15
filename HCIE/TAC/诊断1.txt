@@ -51,6 +51,7 @@ Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
       255.255.255.255/32  Direct  0    0           D   127.0.0.1       InLoopBack0
 
 由以上输出结果可知：AR29 上没有 AR28 的 LoopBack0 接口地址路由信息，可知故障发生在控制层面，由于 AR27、AR28、AR29 之间运行 OSPF 协议，所以需要进一步检查 OSPF 邻居关系。
+
 2.3 检查 AR29 的 OSPF 邻居关系
 
 在 AR29 上通过 display ospf peer brief  命令来检查与 AR28 的邻居关系，输出结果如下：
@@ -119,7 +120,7 @@ Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
  RouterID: 10.5.1.27        Border Router:  AS 
   <.... 略>
  Area: 0.0.0.0          (MPLS TE not enabled)
- Authtype: MD5   Area flag: Normal
+ Authtype: MD5   Area flag: Normal	// 采用 MD5 认证
  SPF scheduled Count: 6     
  ExChange/Loading Neighbors: 0
  Router ID conflict state: Normal
@@ -226,7 +227,6 @@ Total:3         Dynamic:1       Static:0     Interface:2
 
 2.9 检查 AR29 上相关接口报文收发情况
 
-
 在 AR29 上通过 display interface GigabitEthernet 0/0/0 来查看报文收发情况，输出结果如下：
 第一次：
 <AR27>display interface GigabitEthernet 0/0/0
@@ -255,8 +255,7 @@ Input:  7484 packets, 860763 bytes
 
 综上：AR28、AR29 的 OSPF 配置正常，但是 AR29 与 AR28 用于建立 OSPF 邻居关系的直连接口网络层不可达，排除 AR29 与 LSW6 直连接口物理层故障。
 
-故障的根本原因为：
-LSW6 上连接 AR29、AR28 的接口 VLAN 划分不一致，不在同一个广播域内。
+故障的根本原因为：LSW6 上连接 AR29、AR28 的接口 VLAN 划分不一致，不在同一个广播域内。
 
 三、解决方案
 
@@ -300,7 +299,7 @@ display traffic-filter appied-record	// 检查调用了 acl 的接口
 display traffic-policy appied-record	// 检查调用了 traffic-policy 的接口
 system-view			// 进入系统视图
 acl <对应的 ACL>			// 修改 ACL
-rule permit source x.x.x.x x.x.x.x 	// 放行相应的流量
+    rule permit source x.x.x.x x.x.x.x 	// 放行相应的流量
 
 配置以上命令后，在 AR29 上通过如下命令进行测试：
 ping 10.5.128.28			// 检查 AR29 与 AR28 的直连接口连通性

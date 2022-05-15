@@ -81,6 +81,7 @@ OSPF routing table status : <Inactive>
 而 AR32 路由表中存在下一跳为 AR28 的直连接口地址路由，初步判断 AR32 与 AR28 OSPF 邻居关系建立正常，进一步判断 AR32 无法学习到 IS-IS 区域设备路由的原因，可能原因有如下两种：
 
 （1）AR28 作为 ASBR 没有执行 IS-IS 路由引入
+
 （2）AR32 无法计算相应外部路由
 
 由于 AR28 无法登录，可以在 AR27 检查 OSPF 链路状态数据库判断 AR28 是否执行了 IS-IS 路由引入。
@@ -165,7 +166,7 @@ OSPF routing table status : <Inactive>
 
 由于 AR32 的 LoopBack0 接口地址与 IS-IS 区域进行互访，需要保证 AR28 也将 OSPF 引入进 IS-IS 中。
 
-2.6 检查 AR31 和 AE34 的路由表
+2.6 检查 AR31 和 AR34 的路由表
 
 通过检查 AR31 和 AR34 的路由表，判断是否能够正确学习到 AR32 的 LoopBack0 接口地址路由，输出结果如下：
 
