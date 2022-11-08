@@ -63,9 +63,9 @@ xusjf user ---> password + MFA Token ---> successful login
 
 ### Access key
 
-> AKIA2FYMBB3PJDPRIG2D
+> AK****IG2D
 >
-> +VQImUHCsFUCFflOz5zTidJYQbLEy9YvoCbdVKue
+> +VQ****Kue
 
 ```bash
 aws configure
@@ -312,14 +312,14 @@ arn:aws:s3:::*
 
 3. 导入密钥
 
-    > AKIA2FYMBB3PJDPRIG2D
+    > AK****IG2D
     >
-    > +VQImUHCsFUCFflOz5zTidJYQbLEy9YvoCbdVKue
+    > VQ****Kue
 
     ```
     [ec2-user@ip-172-31-88-45 ~]$ aws configure
-    AWS Access Key ID [****************no]: AKIA2FYMBB3PJDPRIG2D
-    AWS Secret Access Key [None]: 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
+    AWS Access Key ID [****************no]: AK****IG2D
+    AWS Secret Access Key [None]: VQ****Kue
     Default region name [None]: us-west-2
     Default output format [None]: json
     
@@ -2037,8 +2037,8 @@ X-Amz-Cf-Id: ChrhyOo3Ec6HRn4G28k1sy7M3ICznD7V36AHXstyLRDmStLwHHg22g==
 
 | Account name | Account id                                                   |
 | ------------ | ------------------------------------------------------------ |
-| xusj         | 699568033502    AKIA2FYMBB3PJDPRIG2D        +VQImUHCsFUCFflOz5zTidJYQbLEy9YvoCbdVKue |
-| qinxue       | 128292574314    AKIAR3XWVKRVPE2Y3EVX           iKbAaaIWvlexchWT8LN9VcuyPW0lC3dAOANqVrM3 |
+| xusj         | 699568033502    AK****IG2D        +VQ****Kue |
+| qinxue       | 128292574314    AK****IG2D           iKbAaaIWvlexchWT8LN9VcuyPW0lC3dAOANqVrM3 |
 
 2. 配置存储桶策略：
 
@@ -2082,11 +2082,11 @@ X-Amz-Cf-Id: ChrhyOo3Ec6HRn4G28k1sy7M3ICznD7V36AHXstyLRDmStLwHHg22g==
 ```bash
 [ec2-user@ip-172-31-89-208]$ cat ~/.aws/credentials
 [xusj]
-aws_access_key_id = AKIA2FYMBB3PJDPRIG2D
-aws_secret_access_key = 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
+aws_access_key_id = AK****IG2D
+aws_secret_access_key = VQ****Kue
 [qinxue]
-aws_access_key_id = AKIAR3XWVKRVPE2Y3EVX
-aws_secret_access_key = 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
+aws_access_key_id = AK****IG2D
+aws_secret_access_key = VQ****Kue
 ```
 
 > 存放时区信息
