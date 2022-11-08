@@ -1,0 +1,92 @@
+一、故障根因 
+
+AR28 的 GigabitEthernet 2/0/0 接口下配置了 filter-lsa-out ase 针对 LSA-5 进行过滤。
+
+二、故障重现
+
+2.1 在 AR32 上以自身 LoopBack0 接口地址为源，去 ping IS-IS 区域设备的 LoopBack0 接口地址，验证故障现象，输出结果如下： 
+
+由以上输出结果可知：AR32 无法访问 IS-IS 区域中所有设备的 LoopBack0 接口地址，故障真实存在，根据故障现象自上而下分层分析故障原因。
+
+首先，检查 AR32 的路由表中是否存在 IS-IS 区域设置中的 LoopBack0 接口地址路由信息，判断是否存在控制层面故障。
+
+2.2 检查 AR32 的路由表
+
+在 AR32 上通过 display ip routing-table protocol ospf 命令检查是否存在 IS-IS 区域设备中的 LoopBack0 接口地址路由信息，输出结果如下：
+
+由以上输出结果可知：AR32 的路由表中并不存在 IS-IS 区域设备中的 LoopBack0 接口地址路由信息，可知故障发生在控制层面。
+
+由于 AR32 的路由表中存在下一跳地址为 AR28 的直连接口路由，所以初步判断 AR32 与 AR28 的 OSPF 邻居关系建立正常。
+
+AR32 无法访问 IS-IS 区域设备的 LoopBack0 接口地址，可能存在如下两种原因：
+
+（1）AR28 作为 ASBR 未正确执行 OSPF 与 IS-IS 双向引入操作。
+
+（2）AR32 自身无法计算外部路由。
+
+由于 AR28 设备无法登录，可以查看 AR27 的链路状态数据库以及路由表判断 AR28 是否将 IS-IS 引入 OSPF 中。
+
+2.3 检查 AR27 的链路状态数据库以及路由表
+
+LSA-5（External） 在除特殊区域以外的整个自治系统内泛洪，AR28 作为 ASBR 会进行 LSA-5 （External）泛洪。
+
+display ospf lsdb | include External
+display ip routing-table protocol ospf
+
+由以上输出结果可知：AR27 的链路状态数据库中存在 IS-IS 区域中所有设备的 LSA-5，且路由表中也存在 IS-IS 区域所有设备的 LoopBack0 地址路由信息，故判断 AR28 将 IS-IS 引入 OSPF 正确。
+
+由于 LSA-5（External）会在除特殊区域以外的整个自治系统内泛洪，此时可以检查 AR32 的链路状态数据库中是否存在 IS-IS 区域所有设备的 LSA-5。
+
+2.4 检查 AR32 的链路状态数据库
+
+display ospf lsdb | include External
+
+由以上输出结果可知：AR32 中并不存在 IS-IS 区域所有设备的 LSA-5，但是 AR27 存在 IS-IS 区域所有设备的 LSA-5，初步判断 AR28 的接口下执行了 LSA-5 过滤。
+
+由于 AR32 与 IS-IS 区域设备进行互访，IS-IS 区域设备也需要 AR32 的 LoopBack0 地址回包路由，需要 AR28 执行 OSPF 引入进 IS-IS 区域操作。
+
+2.5 检查 IS-IS 区域设备路由表
+
+在 IS-IS 区域设备中通过 display ip routing-table 10.5.1.32 查看是否存在回包路由，输出结果如下：
+
+由以上输出结果可知：AR31 的路由表中存在 AR32 的 LoopBack0 地址路由信息，AR32 的路由表中存在两条等价默认路由访问 AR32 的 LoopBack0 地址，所以判断 AR28 将 OSPF 进入 IS-IS 正确。
+
+2.6 检查 AR32、AR31、AR34 是否存在过滤
+
+display acl all
+display ip ip-prefix
+
+由以上输出结果可知：AR32、AR31、AR34 中不存在其它过滤操作，排除 AR32 无法计算外部路由的故障。
+
+2.7 综合分析
+
+综上所述：AR28 作为 ASBR OSPF 与 IS-IS 互相引入正确，AR27 上链路状态数据库可以收到 IS-IS 区域中的 LSA-5，但是 AR32 的链路状态数据库中不存在 IS-IS 区域中的 LSA-5。
+
+所以故障的根本原因为：
+
+AR28 的 GigabitEthernet 2/0/0 接口下配置了 filter-lsa-out ase 针对 LSA-5 进行过滤。
+
+三、解决方案
+
+3.1 AR28 的 GigabitEthernet 2/0/0 接口下配置了 filter-lsa-out ase，需要删除 ospf 过滤操作，具体命令如下：
+system-view
+interface GigabitEthernet 2/0/0
+  display this
+  undo ospf filter-lsa-out
+
+执行完上述命令之后，可以在 AR32 通过如下命令进行测试：
+
+ping -a 10.5.1.32 10.5.1.30
+ping -a 10.5.1.32 10.5.1.31
+ping -a 10.5.1.32 10.5.1.34
+
+3.2 高可能性
+
+高可能一： AR30 的 IS-IS 区域中配置了过滤操作，具体命令如下：
+system-view
+isis 1
+  display this
+  undo filter-policy import
+
+
+

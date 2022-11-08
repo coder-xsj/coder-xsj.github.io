@@ -61,7 +61,7 @@ ctrl+r 搜索历史命令
 
 
 
-`#`注释
+`#` 注释
 
 #### 历史记录
 
@@ -414,7 +414,64 @@ tail -f   == tailf
 
 
 
-```sql
-passthru,exec,system,chroot,chgrp,chown,shell_exec,popen,proc_open,pcntl_exec,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,pcntl_alarm,pcntl_fork,pcntl_waitpid,pcntl_wait,pcntl_wifexited,pcntl_wifstopped,pcntl_wifsignaled,pcntl_wifcontinued,pcntl_wexitstatus,pcntl_wtermsig,pcntl_wstopsig,pcntl_signal,pcntl_signal_dispatch,pcntl_get_last_error,pcntl_strerror,pcntl_sigprocmask,pcntl_sigwaitinfo,pcntl_sigtimedwait,pcntl_exec,pcntl_getpriority,pcntl_setpriority,imap_open,apache_setenv
+18697549560 
+
+
+
+1. 华讯
+2. 神州新桥
+
+
+
+新桥三个人
+
+咸 签合同 --- 银联 --- 
+
+银联缺一个主场 
+
+
+
+IBMA --- 银联 --- 数据中心接入交换机 换板卡 105 - 106
+
+
+
 ```
+EVPN
+```
+
+
+
+
+
+450：
+
+0：
+
+
+
+
+
+172.17.33.60
+
+172.17.33.3
+
+
+
+
+
+
+
+### Docker
+
+```sql
+select * from
+```
+
+>
+>
+>
+
+| id   | name | age  |
+| ---- | ---- | ---- |
+|      |      |      |
 

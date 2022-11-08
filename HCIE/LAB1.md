@@ -13,6 +13,7 @@ SW1 、SW2
 ```sql
 interface Eth-Trunk12
 	load-balance src-dst-mac
+	mode lacp-static
 interface GigabitEthernet0/0/23
 	eth-trunk 12
 interface GigabitEthernet0/0/24

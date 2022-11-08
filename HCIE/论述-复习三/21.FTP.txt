@@ -1,0 +1,71 @@
+问题一：
+1、主动模式
+控制连接建立
+Client 端主动发送控制连接的 TCP 请求消息，Sip：1.1.1.1，Dip：2.2.2.2，S-port：随机端口号 X，D-port：21；
+Server 端针对该请求会回复 ACK 以及 SYN，Client 端再次回复 ACK，控制连接的三次握手建立成功。
+
+控制连接建立成功之后，Client 端会在这个 TCP 通道中发送自己的用户名和密码；
+如果 Server 端允许登录，Client 端会发送 PORT 消息并携带 IP 地址以及用于建立数据连接的随机端口号 Y；
+
+数据连接建立
+Server 端会主动发送数据传输的三次握手连接，Sip:2.2.2.2,Dip:1.1.1.1,S-port： 20,D-port:Y；
+Client 端会回复 ACK 以及 SYN，Server 端再次回复 ACK，用于数据连接建立完成，在数据通道中可以对服务器下载或者上传文件。
+
+1、被动模式
+控制连接建立
+Client 端主动发送控制连接的 TCP 请求消息，Sip：1.1.1.1，Dip：2.2.2.2，S-port：随机端口号 X，D-port：21；
+Server 端针对该请求会回复 ACK 以及 SYN，Client 端再次回复 ACK，控制连接的三次握手建立成功。
+
+控制连接建立成功之后，Client 端会在这个 TCP 通道中发送自己的用户名和密码；
+如果 Server 端允许登录，Client 端会发送 PASV 消息
+Server 端响应并携带用于建立数据连接 IP 地址以及的大于 1024 的随机端口号 Z；
+
+数据连接建立
+Client 端会主动发送数据传输的三次握手连接，Sip:1.1.1.1,Dip:2.2.2.2,S-port：Y（Client 随机端口号）,D-port:Z；
+Sever 端会回复 ACK 以及 SYN，Client 端再次回复 ACK，用于数据连接建立完成，在数据通道中可以对服务器下载或者上传文件。
+
+问题二：
+FTP 是多通道协议，在建立数据通道时，NAT 只能将外层 IP 头部以及 TCP 头部中的 IP 以及端口号进行映射，
+但是 FTP 消息中用于建立数据通道的 IP 以及端口号并没有得到映射，在建立数据通道时，因外网设备无法访问私网 IP 路由，导致数据通道建立失败。
+
+在如下场景中，FTP 通道会建立失败：
+1、服务器在私网，客户端在公网，使用被动模式。
+2、服务器在公网，客户端在私网，使用主动模式。
+
+解决方案：开启 NAT 的 ASPF(应用层包过滤)功能，在进行外层 IP 和端口号映射时，同时将 FTP 消息中的 IP 和端口也进行映射，并生成 NAT translation 表项。
+
+因为防火墙根据 session 表项判断回包是否成功，则可能有如下问题：
+
+1、服务器在私网，客户端在公网，使用被动模式
+客户端会发送 passive 消息，服务器响应回复携带自身的 IP 以及 data-port，比如是 2046；
+外网客户端无法访问内网 IP 地址，且防火墙中没有私网 IP 地址以及 2046 端口号的 session 表项，导致客户端数据通道无法建立。
+因此可以登录到服务器，但是无法上传或下载数据。
+
+2、服务器在公网，客户端在私网，使用主动模式
+如果是主动模式，服务器在建立数据通道时，会以自身的 20 端口请求与客户端的私网 IP 以及 X 端口号连接。
+外网服务器无法访问内网 IP 地址，且防火墙中没有私网 IP 地址以及 X 端口号的 session 表项，导致服务端数据通道无法建立。
+因此可以登录到服务器，但是无法上传或下载数据。
+
+解决方案：在防火墙上开启 NAT 协议的 ASPF（应用层包过滤）功能，检查应用层协议信息，
+在控制通道中检测建立数据通道的 IP 以及端口号等信息，提前生成防火墙的 server-map 表项，后续数据通道建立的数据可以根据 server-map 表生成 session 表，成功转发。
+
+命令如下：
+1、全局下开启：firewall detect ftp
+2、针对相应安全域开启（假设为 dmz，untrust 区域）
+firewall interzone dmz untrust
+  detect ftp
+
+3、如果是双出口场景，可能会因为来回路径不一致，导致网络通信中断。
+例如从 FW1 出去，生成 NAT 映射表以及 FW1 的 session 表，从 FW2 回包，由于此时 FW2 上没有相应表项无法转发数据。
+解决方案：双出口防火墙部署心跳线，部署 VGMP 和 HRP，通过 HRP(华为冗余协议) 同步表项，建立开启会话的快速同步。
+
+主设备命令如下：
+hrp interface GigabitEthernet 0/0/1 remote 10.1.1.2 heartbeat-only	// 指定 HRP 连接本端接口以及远端 IP 地址，且只传输 HRP 控制协商报文
+hrp standby enable													// 允许备份设备参与配置
+hrp auto-sync enable												// 开启会话以及命令相互自动同步
+hrp enable															// 开启 HRP 功能
+
+备份设备命令如下:
+hrp interface GigabitEthernet 0/0/1 remote 10.1.1.1 heartbeat-only
+hrp standby-device													// 指定为备份设备
+hrp enable

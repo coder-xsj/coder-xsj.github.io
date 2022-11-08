@@ -1,0 +1,58 @@
+问题一：
+结合上述拓扑，考虑到存在 RP 场景，则运行的组播协议为 PIM-SM 协议，且组播模型为 ASM 任意源模型。
+1、如果采用 PIM-SM 和 IGMPv1 组合
+1、2、3 号接口需要同时开启 PIM-SM 以及 IGMP 协议。
+PIM-SM 用于 IGMPv1 查询器的选举，PIM DR 选举，组播 RPT 树建立，IGMP 主要用于处理加组报告，维护组成员关系。
+
+2、如果采用 PIM-SM 和 IGMPv2 组合
+1、2 号接口需要同时开启 PIM-SM 以及 IGMP 协议，3 号接口只需要开启 IGMP 协议。
+PIM-SM 用于 PIM DR 选举，组播 RPT 树建立，IGMP 主要用于处理加组报告，维护组成员关系。
+需要注意的是后续如果 3 号接口连接 MA 网络，存在多个路由器的可能则必须开启 PIM-SM 协议。
+
+3、如果采用 PIM-IPv6-SM 和 MLD 组合
+1、2 号接口需要同时开启 PIM-IPv6-SM 以及 MLD 协议，3 号接口只需要开启 MLD 协议。
+PIM-IPv6-SM 用于 PIM IPv6 DR 选举，组播 RPT 树建立，MLD 主要用于处理加组报告，维护组成员关系。
+
+如果存在部分主机不支持 IGMP 或者希望快速转发组播流量的场景，接口也可以配置 IGMP、 MLD 静态加组。
+
+问题二：
+在大型 PIM-SM 组播网络中，RP 汇聚点作为在组播网络中一台重要的 PIM 路由器，因此需要保证可靠性。
+考虑到网络规模较大，静态 RP 的部署需要在网络中所有 PIM 路由器上都配置相同的 RP 地址但是静态 RP 的配置量较大，且无法感知到拓扑变化，所以不适用于大型网络拓扑。
+此处考虑 BSR 机制动态选举 RP，保证可靠性的同时降低 RP 负担。
+我们可以通过如下几个方案来进行解决：
+
+方案一：配置多台 C-RP 且指定不同的服务组地址范围
+在当前网络场景中，将部分路由器配置为 C-RP，且配置多个 C-BSR，保证 C-BSR、C-RP 不会出现单点故障问题。
+后续可以继续通过配置不同的 C-RP 服务于不同的组播组地址范围，实现不同的组播地址选择不同的 RP，降低单一 RP 负担，配置如下：
+如果 R2 的服务组地址为 239.1.1.0/24
+acl 2000
+  rule permit source 239.1.1.0 0.0.0.255
+pim
+  c-rp LoopBack0 group-policy 2000
+
+如果 R3 的服务组地址为 239.1.2.0/24
+acl 2000
+  rule permit source 239.1.2.0 0.0.0.255
+pim
+  c-rp LoopBack0 group-policy 2000
+
+通过以上配置，所有组播地址为 239.1.1.0/24 的业务会使用 R2 作为 RP，所有组播地址为 239.1.2.0/24 的业务会使用 R3 作为 RP，降低负担同时提升可靠性。
+
+方案二：保证开启组成员端 DR 触发切换
+华为设备默认情况下组成员端 DR 接收到第一个组播数据包后立即进行 SPT 切换，切换之后组播流量会通过最优路径经由 SPT 源树从组播源转发至组成员。
+此时组播流量可以允许不经过 RPT 共享树，可以减轻 RP 的组播流量转发负担，需要开启触发切换，不能设置永不切换，具体命令如下：
+[R2-pim]spt-switch-threshold ?
+  INTEGER<1-4194304>  Value of data speed in kbps
+  infinity            Never switch
+
+方案三：部署 AnyCast RP
+上述 RP 部署的场景中，一个组播组只能映射到一个 RP，当网络流量较大，负载较大，可能导致 RP 负担较大，而 RP 失效后路由收敛较慢。
+可以应用基于 PIM 协议的 AnyCast RP，实现组播源端 DR 就近注册以及组成员端 DR 就近加入，降低 RP 的负担也实现了备份。
+假设 R2 和 R3 的环回口都配置了 10.10.1.1/24 作为 AnyCast RP，底层 IGP 保证环回口可达，相应 AnyCast RP 配置如下：
+
+以 R2 为例：
+[R2-pim]c-rp LoopBack0
+[R2-pim]c-bsr LoopBack0
+[R2-pim]anycast-rp 10.1.1.1 	// 配置 anycast rp
+[R2-pim-anycast-rp-10.1.1.1]local-address 2.2.2.2
+[R2-pim-anycast-rp-10.1.1.1]peer 3.3.3.3 	// 对端地址

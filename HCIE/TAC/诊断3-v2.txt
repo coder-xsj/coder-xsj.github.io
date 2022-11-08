@@ -1,0 +1,281 @@
+一、故障根因
+
+（1）AR28 的 GigabitEthernet 2/0/0 接口下执行了 ospf filter-lsa-out summary 调用 acl，针对自身 LoopBack0 接口地址执行 LSA-3 过滤。
+
+（2）AR28 在 OSPF 区域中使用 filter 命令调用策略，在 AREA 0 出向或者 AREA 1 入向针对自身 LoopBack0 接口地址执行过滤操作。
+
+（3）AR28 在 OSPF AREA 0 中进行汇总，并使用了 not-advertise 命令，汇总后不通告 LSA-3。
+
+二、故障分析
+
+2.1 故障重现
+
+在 AR32 上使用自身 LoopBack0 接口为源地址，去 ping AR28 的 LoopBack0 接口地址，验证故障现象，输出结果如下：
+
+<AR32>ping -a 10.5.1.32 10.5.1.28
+  PING 10.5.1.28: 56  data bytes, press CTRL_C to break
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+    Request time out
+
+  --- 10.5.1.28 ping statistics ---
+    5 packet(s) transmitted
+    0 packet(s) received
+    100.00% packet loss
+
+由以上输出结果可知：故障真实存在，根据故障现象自上而下分层分析故障原因。
+
+首先，检查 AR32 的路由表中是否存在 AR28 的 LoopBack0 接口地址路由信息，判断是否存在控制层面故障。
+
+在 AR32 上通过 display ip routing-table protocol ospf 查看是否学习到 AR28 的 LoopBack0 接口地址路由信息，输出结果如下：
+
+<AR32>display ip routing-table protocol ospf 
+Route Flags: R - relay, D - download to fib
+------------------------------------------------------------------------------
+Public routing table : OSPF
+         Destinations : 9        Routes : 9        
+
+OSPF routing table status : <Active>
+         Destinations : 9        Routes : 9
+
+Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
+
+      10.5.1.27/32  OSPF    10   2           D   10.5.239.28     GigabitEthernet0/0/0
+      10.5.1.29/32  OSPF    10   2           D   10.5.239.28     GigabitEthernet0/0/0
+      10.5.1.30/32  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+      10.5.1.31/32  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+      10.5.1.34/32  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+      10.5.14.0/24  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+      10.5.34.0/24  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+      10.5.128.0/24  OSPF    10   2           D   10.5.239.28     GigabitEthernet0/0/0
+      10.5.129.0/24  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+      10.5.130.0/24  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
+
+OSPF routing table status : <Inactive>
+         Destinations : 0        Routes : 0
+
+由以上输出结果可知：AR32 的路由表中不存在 AR28 的 LoopBack0 接口地址路由信息，可知故障发生在控制层面。
+
+但 AR32 的路由表中存在 AR27 的 LoopBack0 接口地址路由信息，初步判断 AR28 的 OSPF 配置正确，但是需要确定两者基于哪个区域建立的 OSPF 邻居关系。
+
+2.3 检查 AR32 的 OSPF 邻居关系
+
+在 AR32 上通过 display ospf peer brief 查看和 AR28 基于哪个区域建立的邻居关系，输出结果如下：
+
+<AR32>display ospf peer brief 
+
+	 OSPF Process 1 with Router ID 10.5.1.32
+		  Peer Statistic Information
+ ----------------------------------------------------------------------------
+ Area Id          Interface                        Neighbor id      State    
+ 0.0.0.1          GigabitEthernet0/0/0             10.5.1.28       Full       
+ ----------------------------------------------------------------------------
+
+由以上输出结果可知：AR32 和 AR28 通过 AREA 1 建立 OSPF 邻居关系，但是两者 LoopBack0 接口无法互通，初步判断存在如下原因：
+
+（1）AR28 的 LoopBack0 未宣告进 OSPF 中
+
+（2）AR32 自身无法计算 AR28 的 LoopBack0 路由信息
+
+由于 AR28 无法登录，但是 AR27、AR28 之间运行 OSPF 协议，可以在 AR27 上检查链路状态数据库中，从 AR28 收到的 LSA-1、LSA-3 中是否包含自身的 LoopBack0 接口地址路由信息。
+
+2.4 检查 AR27 的链路状态数据库
+
+<AR27>display ospf lsdb router originate-router 10.5.1.28		// 从 AR28 收到的 LSA-1
+
+	 OSPF Process 1 with Router ID 10.5.1.27
+		         Area: 0.0.0.0
+		 Link State Database 
+
+
+  Type      : Router
+  Ls id     : 10.5.1.28
+  Adv rtr   : 10.5.1.28  
+  Ls age    : 376 
+  Len       : 48 
+  Options   :  ASBR  ABR  E  
+  seq#      : 80000008 
+  chksum    : 0xa0ba
+  Link count: 2
+   * Link ID: 10.5.128.30  
+     Data   : 10.5.128.28  
+     Link Type: TransNet     
+     Metric : 1
+   * Link ID: 10.5.1.28    
+     Data   : 255.255.255.255 
+     Link Type: StubNet      
+     Metric : 0 
+     Priority : Medium
+
+<AR27>display ospf lsdb summary originate-router 10.5.1.28	// 从 AR28 收到的 LSA-3
+
+	 OSPF Process 1 with Router ID 10.5.1.27
+		         Area: 0.0.0.0
+		 Link State Database 
+
+
+  Type      : Sum-Net
+  Ls id     : 10.5.1.32
+  Adv rtr   : 10.5.1.28  
+  Ls age    : 403 
+  Len       : 28 
+  Options   :  E  
+  seq#      : 80000001 
+  chksum    : 0x38c7
+  Net mask  : 255.255.255.255
+  Tos 0  metric: 1
+  Priority  : Medium
+
+  Type      : Sum-Net
+  Ls id     : 10.5.239.0
+  Adv rtr   : 10.5.1.28  
+  Ls age    : 442 
+  Len       : 28 
+  Options   :  E  
+  seq#      : 80000001 
+  chksum    : 0x35fb
+  Net mask  : 255.255.255.0
+  Tos 0  metric: 1
+  Priority  : Low
+
+由以上输出结果可知：
+从 AR28 收到的 LSA-1 中包含 AR28 自身 LoopBack0 接口路由信息；
+从 AR28 收到的 LSA-3 中包含 AR32 的 LoopBack0 接口路由信息。
+
+故排除 AR28、AR32 的 LoopBack0 接口未宣告进 OSPF 的故障。
+
+由于 AR28 的 LoopBack0 宣告进 AREA 0 区域中，AR28 与 AR32 通过  AREA 1 区域建立 OSPF 邻居关系，所以 AR28 作为 ABR 会将包含自身 LoopBack0 接口路由信息的 LSA-3 注入进 AREA 1 区域中，此时可以检查 AR32 收到的 AR28 发送的 LSA-3 中是否存在 LoopBack0 接口地址路由信息。
+
+2.5 检查 AR32 的链路状态数据库
+
+<AR32>display ospf lsdb summary originate-router 10.5.1.28	// 收到 AR28 的 LSA-3
+
+	 OSPF Process 1 with Router ID 10.5.1.32
+		         Area: 0.0.0.1
+		 Link State Database 
+
+
+  Type      : Sum-Net
+  Ls id     : 10.5.128.0
+  Adv rtr   : 10.5.1.28  
+  Ls age    : 778 
+  Len       : 28 
+  Options   :  E  
+  seq#      : 80000001 
+  chksum    : 0xfea1
+  Net mask  : 255.255.255.0
+  Tos 0  metric: 1
+  Priority  : Low
+
+  Type      : Sum-Net
+  Ls id     : 10.5.1.33
+  Adv rtr   : 10.5.1.28  
+  Ls age    : 743 
+  Len       : 28 
+  Options   :  E  
+  seq#      : 80000001 
+  chksum    : 0x38c5
+  Net mask  : 255.255.255.255
+  Tos 0  metric: 2
+  Priority  : Medium
+
+  Type      : Sum-Net
+  Ls id     : 10.5.1.29
+  Adv rtr   : 10.5.1.28  
+  Ls age    : 743 
+  Len       : 28 
+  Options   :  E  
+  seq#      : 80000001 
+  chksum    : 0x56ac
+  Net mask  : 255.255.255.255
+  Tos 0  metric: 1
+  Priority  : Medium
+
+  Type      : Sum-Net
+  Ls id     : 10.5.1.27
+  Adv rtr   : 10.5.1.28  
+  Ls age    : 742 
+  Len       : 28 
+  Options   :  E  
+  seq#      : 80000001 
+  chksum    : 0x6a9a
+  Net mask  : 255.255.255.255
+  Tos 0  metric: 1
+  Priority  : Medium
+
+  Type      : Sum-Net
+  Ls id     : 10.5.40.0
+  Adv rtr   : 10.5.1.28  
+  Ls age    : 744 
+  Len       : 28 
+  Options   :  E  
+  seq#      : 80000001 
+  chksum    : 0xd423
+  Net mask  : 255.255.255.0
+  Tos 0  metric: 2
+  Priority  : Low
+
+由以上输出结果可知：AR32 的 LSDB 中收到的 AR28 的 LSA-3 中不存在自身 LoopBack0 接口路由信息，但是两者邻居关系正常建立，初步判断 AR28 执行了 LSA-3 的过滤操作。
+
+查看 AR32 中是否存在其它过滤操作。
+
+2.6 检查 AR32 中是否存在其它过滤操作
+
+<AR32>display acl all
+ Total quantity of nonempty ACL number is 0
+<AR32>disp ip ip-prefix
+
+由以上是输出结果可知：AR32 中并不存在流量过滤，所以排除 AR32 无法计算 AR28 的 LoopBack0 路由信息。
+
+2.7 综合分析
+
+综上所述，AR32 与 AR28 邻居关系建立正常但是两者 LoopBack0 接口无法互访，排除 AR32、AR28 的 LoopBack0 未宣告进 OSPF 的故障，且 AR32 收到 AR28 的 LSA-3 中不存在自身 LoopBack0 的路由信息，所以故障的根本原因是：AR28 中执行了 LSA-3 的过滤操作。
+
+参考当前网络环境，针对 LSA-3 过滤有如下三种可能：
+
+（1）AR28 的 GigabitEthernet 2/0/0 接口下执行了 ospf filter-lsa-out summary 调用 acl，针对自身 LoopBack0 接口地址执行 LSA-3 过滤。
+
+（2）AR28 在 OSPF 区域中使用 filter 命令调用策略，在 AREA 0 出向或者 AREA 1 入向针对自身 LoopBack0 接口地址执行过滤操作。
+
+（3）AR28 在 OSPF AREA 0 中进行汇总，并使用了 not-advertise 命令，汇总后不通告 LSA-3。
+
+三、解决方案
+
+3.1 在 AR28 的 GigabitEthernet 2/0/0 接口下执行了 ospf filter-lsa-out summary 命令，需要删除 LSA-3 过滤命令，具体命令如下：
+system-view
+interface GigabitEthernet 2/0/0
+  display this
+  undo ospf filter-lsa-out
+
+3.2 AR28 在 OSPF 视图中使用 filter 命令调用策略，需要删除调用策略，具体命令如下：
+system-view
+ospf 1
+  display this
+  area 0
+    undo filter outbound
+  area 1
+    undo filter inbound
+
+3.3 AR28 汇总不通告，删除 no-advertise 命令，具体命令如下：
+system-view
+ospf 1
+  area 0
+    undo abr-summary x.x.x.x y.y.y.y
+
+3.4 高可能性
+
+高可能性一：AR28 上存在流量过滤策略，放行相应流量即可，具体命令如下：
+system-view			// 进入系统视图
+display acl all			// 查看 acl 
+acl <对应 ACL 序号>		// 如果存在 ACL 进行流量过滤，则修改 ACL
+    rule permit source x.x.x.x x.x.x.x.	// 放行相应的流量
+
+如果以上故障得到解决，则需要指导客户进行设备保存并提交如上述障排查报告，防止故障再次发生，需要配置如下命令：
+return		// 返回用户视图
+save		// 保存设备配置
+y		// 确认保存配置
+
+3.3 如果执行完以上所有方案，故障依旧存在，则需要客户提供完整的设备配置信息或者派遣一线工程师到达客户现场进行排查，同时并拨打华为 400 服务热线请求华为专家的协助，谢谢！
+

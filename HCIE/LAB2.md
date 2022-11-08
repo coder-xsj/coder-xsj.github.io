@@ -873,8 +873,38 @@ ip route-static 0.0.0.0 0.0.0.0 100.0.1.2 track nqa admin icmp
 ![image-20211007161442136](https://i.loli.net/2021/10/14/oprBI4idcXFUCZk.png)
 
 1. ISIS-IPv6和如图配置IPv6接口开销值（5分）
-
 2. AS 100中相邻设备建立PIM IPV6 SM的邻居关系。PE1的E0/0/0静态加入组FF1E::AA。（2分）
+
+注意：以上 6 台设备一定要打开 isis 的多拓扑能力
+
+```sql
+sy
+isis
+	ipv6 enable topology ipv6
+	quit
+```
+
+以 PE1 为例配置
+
+```sql
+interface Ip-Trunk1
+	isis ipv6 enable
+ 	isis ipv6 cost 1550
+int g0/0/0
+	isis ipv6 enable
+ 	isis ipv6 cost 20
+int LoopBack0
+	isis ipv6 enable
+```
+
+检查：
+
+```sql
+disp isis int  # 看接口 ipv6 up
+disp ipv6 routing pro isis # 看到 D1 to D6 可以验证下 cost 是否为 2510
+```
+
+
 
 > 1. 以 PE1 为例
 
@@ -970,7 +1000,7 @@ int loop0
 
 
 
-B、配置C-RP的服务组地址范围，并且调整ASBR1为RP --- 越小越优
+**B、配置C-RP的服务组地址范围，并且调整ASBR1为RP --- 越小越优**
 
 ASBR1 配置
 
@@ -992,7 +1022,7 @@ pim-ipv6
 
 ```sql
 pim-ipv6
-	c-bsr priority 0
+	c-rp priority 0
 ```
 
 ASBR2 配置

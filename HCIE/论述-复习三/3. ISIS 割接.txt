@@ -1,0 +1,47 @@
+结合上述拓扑对现网概况进行充分调研，确保割接前期的需求分析、风险预案、割接方案等得到充分论证，然后根据割接方案进行择期割接。
+分析目前现网情况，在所有链路开销值都一致的情况下，总部和分支之间的互访流量应采用负载分担方式流经 R2、R3。
+考虑到该割接场景中需要对 R3 设备进行替换，可以采用直接替换或者逐步融入的方式进行上述割接的实现，为了防止业务中断，建议采用逐步融入的方式进行设备替换。
+首先将高性能设备 R5 接入到目前网络当中，并与 R1、R2 和 R4 建立 IS-IS 邻居关系，此时所有路由器都可以进行数据转发，可以通过如下方案实现割接，完成流量转发路径的切换。
+方案一：设置 R3 的过载标识位 OverLoad
+设置 R3 的 OverLoad-bit 过载位之后，R3 产生的 IS-IS LSP 报文中 OverLoad-bit 会置位，其它设备如 R1、R4 在进行 SPF 计算时不会使用 R3 做转发（除 R3 直连路由以外），，从而暂时将 R3 从网络中隔离，业务流量不会经过 R3 转发，过载位配置如下：
+isis 1
+	set-overload
+
+方案二：修改与 R3 直连链路的 IS-IS 开销值
+将 R3 连接 R1、R3 连接 R2、R3 连接 R4 的链路两端的 IS-IS 接口开销值改大，修改完开销值后，R1、R4 在进行路由计算时不会使用 R3 进行转发，修改开销值命令如下：
+（1）如果 cos-style 为 narrow 模式，配置如下：
+interface GigabitEthernet x/x/x
+	isis cost 63
+（2）如果 cos-style 为 wide 模式，配置如下：
+interface GigabitEthernet x/x/x
+	isis cost maximum
+
+方案三：设置 R1 和 R4 下一跳权重
+在 R1 和 R4 上，流量往返负载分担，可以通过配置下一跳为 R2 或 R5 的权重更优，从而影响选路。
+R1、R4 配置如下：
+isis 1 
+	nexthop x.x.x.x weight 1 	// x.x.x.x 为 R2 和 R5 的接口地址
+
+方案四：部署策略路由
+在 R1、R4 连接各自网络接口下配置策略路由，进行流量转发重定向，将流量引流是 R2 或 R5 设备，相应配置如下：
+（1）使用 acl 匹配相应业务流量
+acl 2000
+	rule permit source x.x.x.x y.y.y.y 	// 匹配相应业务流量
+
+（2）使用流分类匹配 acl
+traffic classifier C1
+	if-match acl 2000
+
+（3）使用流行为将流量重定向至 R2 或 R5
+traffic behavior B1
+	redirect ip-nexthop x.x.x.x
+
+（4）使用流策略关联流分类和流行为
+traffic-policy P1
+	classifier C1 behavior B1
+
+（5）接口入向调用流策略
+interface GigabitEthernet x/x/x
+	traffic-policy P1 inbound
+
+通过上述方案，从控制层面或转发层面将流量引导至 R2 或 R5，注意按照割接流程应进行充分业务测试，确保业务正常后将 R3 从现网中移除，将相应割接材料提交并完成验收。

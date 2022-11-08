@@ -6,7 +6,7 @@ AR29 和 AR33 的 Hello/Dead 时间不一致，AR29 的 Hello/Dead 时间为 10s
 
 2.1 故障重现
 
-在 AR29 使用自身 LoopBack0 接口作为源地址，去 ping AR33 的 LoopBack0 接口地址，判断是否存在故障，输出结果如下：
+在 AR29 使用自身 LoopBack0 接口作为源地址，去 ping AR33 的 LoopBack0 接口地址，输出结果如下：
 
 <AR29>ping -a 10.5.1.29 10.5.1.33
   PING 10.5.1.28: 56  data bytes, press CTRL_C to break
@@ -227,11 +227,11 @@ acl <acl 编号>				// 进入相应的 ACL
     rule <规则编号> permit source x.x.x.x x.x.x.x 	// 放行相应的流量
 ip ip-prefix <prefix-name> permit x.x.x.x x.x.x.x	// 放行相应前缀列表流量
 
-高可能性三：AR33 的接口配置了 ospf filter-lsa-all 命令，需要配置命令如下：
+高可能性三：AR33 的接口配置了 ospf filter-lsa-out all 命令，需要配置命令如下：
 system-view				// 进入系统视图
 intface GigabitEthernet 0/0/1			// 进入接口视图
     display this				// 查看当前下接口配置，是否存在过滤操作
-    undo ospf filter-lsa-all			// 删除 ospf lsa 过滤
+    undo ospf filter-lsa-out			// 删除 ospf lsa 过滤
 
 执行完以上命令之后，在 AR29 上进行如下测试：
 display ospf peer brief		// 查看与 AR33 的 OSPF 邻居关系

@@ -6,7 +6,7 @@ LSW6 上连接 AR29、AR28 的接口 VLAN 划分不一致，不在同一个广�
 
 2.1 故障根因
 
-在 AR29 上使用自身 LoopBack0 地址作为源地址，去 ping AR28 的 LoopBack0 地址，输出结果如下：
+在 AR29 上使用自身 LoopBack0 接口地址作为源地址，去 ping AR28 的 LoopBack0 接口地址，输出结果如下：
 
 <AR29>ping -a 10.5.1.29 10.5.1.28
   PING 10.5.1.28: 56  data bytes, press CTRL_C to break
@@ -27,7 +27,7 @@ LSW6 上连接 AR29、AR28 的接口 VLAN 划分不一致，不在同一个广�
 
 2.2 检查 AR29 的路由表
 
-在 AR29 上通过 display ip routing-table 来查看是否存在 AR28 的 LoopBack0 地址路由信息，输出结果如下：
+在 AR29 上通过 display ip routing-table 来查看是否存在 AR28 的 LoopBack0 接口地址路由信息，输出结果如下：
 
 [AR29]display ip routing-table
 Route Flags: R - relay, D - download to fib
@@ -190,9 +190,9 @@ Receive Grace LSA errors:
 
 2.7 检查两者直连接口网络层连通性
 
-在 AR29 上去 ping 10.5.128.29
+在 AR29 上去 ping 10.5.128.28
 
-<AR27>ping 10.5.128.29
+<AR29>ping 10.5.128.28
   PING 10.5.128.29: 56  data bytes, press CTRL_C to break
     Request time out
     Request time out

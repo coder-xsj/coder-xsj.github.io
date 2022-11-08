@@ -1,0 +1,87 @@
+问题一：
+通常在园区网出口设备会配置默认路由访问外部网络，由于该场景需要实现转发路径优选 ISP1 的需求，我们可以从控制层面和转发层面两个角度提供相应解决方案：
+1、控制层面
+通过调整静态默认路由优先级，实现主备浮动默认静态路由，相应配置如下：
+ip route-static 0.0.0.0 0.0.0.0 x.x.x.x preference 59	// x.x.x.x 为 ISP1 的接口地址
+ip route-static 0.0.0.0 0.0.0.0 x.x.x.x	// x.x.x.x 为 ISP2 的接口地址
+由于静态路由优先级默认为 60，此时指向 ISP1 的路由会被优选并加入到路由表，当该路由失效，就会切换到连接 ISP2 的路由进行数据转发。
+
+2、转发层面
+控制层面静态默认路由仍然采用负载分担路由，相应配置如下：
+ip route-static 0.0.0.0 0.0.0.0 x.x.x.x  // x.x.x.x 为 ISP1 的接口地址
+ip route-static 0.0.0.0 0.0.0.0 x.x.x.x // x.x.x.x 为 ISP2 的接口地址
+可以转发层面配置基于 PBR 的策略路由，实现转发层面的路径限制，优选 ISP1 的链路，可以配置基于 MQC 的接口策略路由，相应配置如下：
+（1）使用 acl 匹配相应内网流量
+	acl 2000
+		rule permit source x.x.x.x y.y.y.y	// 匹配内网流量
+	
+（2）使用流分类匹配 acl
+    traffic classifier C
+        if-match acl 2000
+
+（3）使用流行为重定向至 ISP1
+  	traffic behavior B
+  	    redirect ip-nexthop x.x.x.x 	// 重定向到 ISP1
+
+（4）使用流策略关联流分类和流行为
+	traffic-policy P
+	    classifier C behavior B
+
+（5）内网接口入向调用流策略
+    interface GigabitEthernet x/x/x
+        traffic-policy P inbound    // 入向调用流策略
+
+
+问题二：
+考虑上述控制层面和转发层面方案仍存在缺陷，如果 R1 控制板出现故障无法处理相应报文，但接口状态仍然为 up，导致静态默认路由无法感知到故障，无法切换到备份链路，造成流量丢失，此问题可以从如下方案进行解决：
+1、控制层面
+（1）静态路由与 BFD 联动
+在出口路由器上配置 BFD 会话，通过 BFD 单臂回声会话实现到 ISP1 的连通性检测，控制层面静态路由与 BFD 进行联动，当 BFD 会话出现故障，就会切换到备份链路，通过 ISP2 链路进行数据转发，相应配置如下：
+bfd
+quit
+bfd toisp1 bind peer-ip x.x.x.x interface GigabitEthernet x/x/x one-arm-echo	// x.x.x.x 为 ISP1 接口地址，x/x/x 为连接 ISP1 的接口编号
+discriminator local 1
+commit
+ip route-static 0.0.0.0 0.0.0.0 x.x.x.x preference 59 track bfd-session toisp1	// x.x.x.x 为 ISP1 的接口地址
+ip route-static 0.0.0.0 0.0.0.0 x.x.x.x	// x.x.x.x 为 ISP2 的接口地址
+
+（2）静态路由与 NQA 联动
+在出口路由器上配置 NQA 测试例，通过 NQA ICMP 检测去往 ISP1 链路的丢包率，控制层面静态路由与 NQA 测试例进行联动，如果丢包率超过设置的阈值或连通性出现问题，则会切换到备份路径，通过 ISP2 链路进行数据转发，相应配置如下：
+nqa test-instance admin icmp
+    test-type icmp 
+    destination-address ipv4 x.x.x.x 	// x.x.x.x 为连接 ISP1 的接口地址
+    fail-percent 30						// 设置丢包率为 30%
+    start-now
+ip route-static 0.0.0.0 0.0.0.0 x.x.x.x preference 59 track nqa admin icmp	// x.x.x.x 为 ISP1 的接口地址
+ip route-static 0.0.0.0 0.0.0.0 x.x.x.x	// x.x.x.x 为 ISP2 的接口地址
+
+通过上述配置以后，如果去往 ISP1 的丢包率超过 30%，则会切换到备份路径，通过 ISP2 链路进行数据转发。
+
+2、转发层面
+（1）接口策略路由联动 NQA
+可以转发层面部署接口策略路由联动 NQA，检测去往 ISP1 的丢包率，如果丢包率超过设置的阈值或连通性出现问题，则接口策略路由失效，切换到备份路径，相应配置如下：
+nqa test-instance admin icmp
+    test-type icmp 
+    destination-address ipv4 x.x.x.x 	// x.x.x.x 为连接 ISP1 的接口地址
+    fail-precent 30						// 设置丢包率为 30%
+    start-now
+traffic behavior NQA
+    redirect ip-nexthop x.x.x.x track nqa admin icmp	// x.x.x.x 为 ISP1 接口地址
+
+（2）智能策略路由
+创建 acl 匹配相应流量以及 NQA 测试例的配置与上述方案基本一致，但是关联智能策略路由的方式并不相同，具体方式如下：
+配置智能策略路由的路由参数：
+smart-route-policy
+    prober GigabitEthernet x/x/x track admin nqa1   // x/x/x 为连接 ISP1 的接口编号
+    prober GigabitEthernet x/x/x track admin nqa2   // x/x/x 为连接 ISP2 的接口编号
+    link-group1
+        link-member GigabitEthernet x/x/x
+    link-group2
+        link-member GigabitEthernet x/x/x
+智能策略路由的业务参数：
+smart-route-policy
+    service-map map1
+        set loss threshold 30   // 配置业务的丢包率阈值为 30%
+        set link-group group1 
+        set link-group group2 backup
+通过上述智能策略路由将连接 ISP1 的链路设置为主链路，正常情况下通过 ISP1 转发数据，如果当前链路丢包率超过 30%，则会切换到备份链路，使用 ISP2 链路进行数据转发，后续可以根据业务情况调整 NQA 测试类型，比如延迟、抖动等指标。

@@ -44,6 +44,7 @@ OSPF routing table status : <Active>
 
 Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
 
+      10.5.1.27/32  OSPF    10   2           D   10.5.239.28     GigabitEthernet0/0/0
       10.5.1.29/32  OSPF    10   2           D   10.5.239.28     GigabitEthernet0/0/0
       10.5.1.30/32  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
       10.5.1.31/32  O_ASE   150  1           D   10.5.239.28     GigabitEthernet0/0/0
@@ -63,7 +64,7 @@ OSPF routing table status : <Inactive>
 
 2.3 检查 AR32 的 OSPF 邻居关系
 
-在 AR32 上通过 display ospf peer brief，查看和 AR28 基于哪个区域建立的邻居关系，输出结果如下：
+在 AR32 上通过 display ospf peer brief 查看和 AR28 基于哪个区域建立的邻居关系，输出结果如下：
 
 <AR32>display ospf peer brief 
 

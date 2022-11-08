@@ -107,6 +107,8 @@ git rm -r --cached .idea
 ~~~
 git config --global user.name "coder-xsj"
 git config --global user.email '2449382518@qq.com'
+git config --global user.email 'fibonacci701408733@163.com'
+ssh-keygen -t rsa -C "fibonacci701408733@163.com"
 
 --- 提一句 ---
 git config -l 查看当前的所有信息

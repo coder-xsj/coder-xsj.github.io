@@ -1160,6 +1160,7 @@ Destination/Mask    Proto   Pre  Cost      Flags NextHop         Interface
 1. `disp ospf peer brief`
 2. `disp ospf error int g0/0/0` 
 3. `disp ospf int`
+4. `authentication-mode md5 1 cipher hcie`
 
 ------
 
@@ -1208,6 +1209,8 @@ commit
 3. R106 配置
 
 ```sql
+bfd
+q
 bfd 1 bind peer-ip 10.2.106.10 source-ip 10.2.106.6 auto
 commit
 q
@@ -1346,6 +1349,32 @@ ipconfig /renew
 #### 9、VRRP6
 
  正确部署VRRP6，要求AR10成为Master设备
+
+##### 正确配法
+
+R10
+
+```sql
+interface GigabitEthernet0/0/0
+  ipv6 address 2002:10:2:129::10/64 
+  ipv6 address FE80::10 link-local
+  
+  vrrp6 vrid 1 virtual-ip FE80::254 link-local
+  vrrp6 vrid 1 virtual-ip 2002:10:2:129::254
+  vrrp6 vrid 1 priority 200
+```
+
+R11
+
+```sql
+interface GigabitEthernet0/0/0
+  ipv6 address 2002:10:2:129::11/64 
+  ipv6 address FE80::11 link-local
+  
+  vrrp6 vrid 1 virtual-ip FE80::254 link-local
+  vrrp6 vrid 1 virtual-ip 2002:10:2:129::254
+
+```
 
 ##### 解决方案
 
@@ -1882,7 +1911,7 @@ rule 5 permit source 10.0.1.10 0.0.0.255
 
 ##### 解决方案
 
-###### 	一、R16的 telnet 认证方式为 AAA，admin 用户级别为 15 级，guest 用户级别为 1 级
+###### 	一、R16 的 telnet 认证方式为 AAA，admin 用户级别为 15 级，guest 用户级别为 1 级
 
 1. 先去看下 aaa
 

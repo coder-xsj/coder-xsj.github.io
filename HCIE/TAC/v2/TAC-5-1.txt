@@ -111,7 +111,7 @@ Total Peer(s): 1
 
 由以上输出结果可知：两者直连接口互通，进一步检查两者直连接口是否收到 IS-IS 错误报文。
 
-2.6 检查 AR31 相关接口是否收到 IS-IS 错误报文
+2.6 检查 AR34 相关接口是否收到 IS-IS 错误报文
 
 在 AR34 上通过 display isis error interface 命令检查是否收到 IS-IS 错误报文，输出结果如下：
 

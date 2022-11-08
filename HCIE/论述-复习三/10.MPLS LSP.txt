@@ -1,0 +1,105 @@
+问题一：
+MPLS公网 LSP 可以通过静态 LSP 或者动态 LDP LSP 的方式建立，需要根据不同的建立方式分析故障可能原因：
+一、静态 LSP 建立故障
+可以通过 display mpls lsp-static verbose 查看静态 LSP 的详细信息，确定静态 LSP 的配置以及状态是否正确，则可能有如下故障原因：
+1、部分设备未学习到特定公网路由，导致 LSP 无法建立，可以通过 display ip routing-table protocol ospf 查看底层 IGP 路由表。
+
+2、部分接口未开启 mpls，导致静态 LSP 显示为 down。
+
+3、部分设备静态 LSP 配置错误，注意当前网络类型为以太网类型，静态 LSP 配置必须指定下一跳。
+
+4、部分设备静态 LSP 配置错误，对于 Transit 节点和 Egress 节点，上游设备的出标签与自身的入标签需要保持一致。
+
+二、动态 LSP 建立故障
+可以通过 display mpls lsp 查看 lsp 的建立是否正确且完整，动态 LSP 可能存在如下故障：
+1、LDP 会话建立故障
+可以通过 display mpls ldp peer 检查传输地址配置，通过 display mpls ldp session 检查 LDP 会话是否正确建立，LDP 会话故障原因可能如下：
+（1）LSR-ID 配置错误
+建议使用环回口作为 MPLS LSR-ID，MPLS LSR-ID 配置错误也会导致 LDP 会话无法建立。
+
+（2）底层 IGP 故障导致传输地址不可达
+底层 IGP 出现故障导致特定公网路由（传输地址）不可达，也会导致 LDP 会话无法建立，建立 LDP 会话使用的传输地址需要通过底层 IGP 实现可达，可以通过 display ip routing-table protocol ospf 查看底层 IGP 路由表。
+
+（3）未开启 MPLS/MPLS LDP
+某些节点系统视图或者接口视图未开启 MPLS/MPLS LDP 也会导致 LDP 会话无法建立，可以通过 display mpls interface 或者 display mpls ldp interface 检查是否配置。
+
+（4）标签通告方式不一致
+如果设备配置的标签通告方式不一致也会导致 LDP 会话无法建立，DU 下游主动和 DOD 下游按需不同的建立方式也会导致 LDP 会话无法建立，可以通过 display mpls ldp session 检查 LDP 会话是否建立，通过 display mpls ldp interface 检查接口配置。
+
+2、标签分发故障
+（1）非 /32 位主机路由
+某些设备的环回口未配置为 /32 位主机路由，华为设备默认情况下只会为 /32 位主机路由分配并通告标签。
+
+（2）错误汇总
+如果部署多区域的 OSPF，在 ABR 上执行汇总也会导致 LDP 会话无法建立，可以通过跨域扩展 longest-match 解决。
+
+（3）针对 FEC 标签分发过滤
+存在 lsp-trigger 命令匹配前缀列表不会特定路由分配标签。
+
+问题二：
+ping 和 tracret 作为基于 ICMP 协议的常用故障检测工具，可以检测传统 IP 网络的连通性及故障定位。
+ping 使用 ICMP Echo Request 和 ICMP Echo Reply 报文完成连通性检测。
+tracert 可以显示完整路径并进行定位故障。
+
+传统 IP ping 和 tracert 在 mpls 网络中主要有如下问题：
+1、只能检测 ip 连通性，无法检测 lsp 连通性
+在 MPLS 网络中，传统 IP ping 和 tracert 工具无法检测 mpls lsp 的建立是否完整，无法完成 mpls 转发层面的连通性检测。
+
+2、MPLS 对 TTL 的处理采用 PIPE 管道模式
+PIPE 管道模式只对 Ingress 入节点和 Egress 出节点进行 IP TTL 减 1 处理，不会复制到 MPLS TTL 中，MPLS 报文转发过程中对 TTL 做单独处理，导致 tracert 无法正常工作，ip 可以正常工作但是 TTL 值显示不正确。
+
+3、中间节点 P 设备可能无法回应 ICMP 响应报文
+在 MPLS VPN 场景中，缺省情况下中间节点设备收到的 MPLS 报文只会包含一层标签，LSR 使用 IP 路由表返回 ICMP 响应报文，因为不存在 IP 私网路由，出现超时的情况，导致 tracert 无法正常工作。
+
+问题三：
+一、针对传统 IP ping 和 tracert 无法检测 LSP 的连通性，可以通过 MPLS ping 和 MPLS tracert 工具检测 LSP 的连通性及故障定位。
+MPLS ping 和 MPLS tracert 通过 MPLS Echo Request 报文和 MPLS Echo Reply 报文检测 LSP 的连通性、完整性。
+这两种消息都是基于 UDP 封装，端口号为 3503。
+1、使用 MPLS ping 检测 LSP 的连通性
+可以在 Ingress 入节点上通过 ping lsp ip x.x.x.x 32 检测 LSP 的连通性，其工作过程如下：
+（1）Ingress 入节点会构造 MPLS Echo Request 报文，压入相应标签并发送给 Transit 节点，ip 报文头中的目的地址为 127.0.0.1/8，将 FEC 地址填入 Target-FEC 字段中。
+
+（2）Transit 节点收到 MPLS Echo Request 报文进行普通 MPLS 转发。
+
+（3）Engress 出节点在 LSP 建立完整的情况下收到 MPLS Echo Request 报文，将报文解封装后检查 Target-FEC 字段中目的地址是否为自身接口地址，判断是否是该 FEC 的出口地址，如果是则返回正确的 MPLS Echo Reply 报文。
+
+至此，整个 MPLS ping 过程结束。
+
+2、使用 MPLS tracert 定位 LSP 的故障位置
+可以在 Ingress 入节点上通过 tracert lsp ip x.x.x.x 32 检测 LSP 的故障位置并观察各节点标签交换情况，其工作过程如下：
+（1）Ingress 入节点会构造 MPLS Echo Request 报文，ip 报文头中的目的地址为 127.0.0.1/8，查找相应的 LSP 压入相应标签并将 MPLS TTL 设置为 1，然后发送给 Transit 节点，该报文中报文 Target-FEC 字段以及下游映射 TLV 字段。
+
+（2）Transit 节点收到上游设备发送 MPLS Echo Request 报文，会对 MPLS TTL 减 1 处理，当 TTL = 0 后 TTL 超时，会继续检查是否存在对应 FEC 的 LSP，分析下游映射 TLV 中的下一跳地址和出标签是否正确，然后返回 MPLS Echo Reply 报文并携带 Transit 节点自身的包含下一跳以及出标签的下游映射 TLV 字段。
+
+（3）Ingress 入节点不断对 TTL 加 1 重复上述步骤，直到 Engress 出节点收到 MPLS Echo Request 报文。
+
+（4）Engress 出节点检查 Target-FEC 字段中的目的地址是否为自身接口地址，如果为自身接口地址则返回不带下游信息的 MPLS Echo Reply 报文。
+
+至此，整个 MPLS tracert 过程结束。
+
+3、通过 MPLS ping 和 MPLS tracert 检查出 LSP 故障，可以通过问题一中的步骤来进行排查，简述如下：
+（1）使用 display mpls lsp 检查 LSP 的建立是否完整，可以逐设备观察标签 LSP 标签是否分配正确。
+
+（2）如果 LSP 无法建立，则需要考虑底层 IGP 层面，可以通过 display ip routing-table protocol ospf 查看底层 IGP 路由表。
+
+（3）如果路由表正确，传输地址可达，可以通过 display mpls ldp session 检查 LDP 会话是否建立完成。
+
+（4）如果 MPLS/MPLS LDP 都已开启，标签通告原则正确，可以通过 display mpls ldp interface 验证相应配置。
+
+（5）排除错误汇总以及特定标签分发过滤导致 LSP 无法建立。
+
+二、MPLS 对 TTL 的处理采用 PIPE 管道模式
+可以配置修改 MPLS 对 TTL 的处理采用 Uniform 统一模式，配置命令如下：
+system-view
+	ttl propagate	// 对 TTL 的处理采用 Uniform 统一模式
+如果出于安全的考虑，需要隐藏 MPLS 骨干网络的结构，建议仍采用 PIPE 管道模式。
+
+三、中间节点 P 设备可能无法回应 ICMP 响应报文
+可以配置 MPLS TTL 超时沿 LSP 返回 ICMP 响应报文，配置如下：
+system-view
+	mpls
+		undo ttl expiration pop 	// 沿 LSP 返回 ICMP 响应报文
+配置上述命令之后，ICMP 响应报文将按照 LSP 继续传送，到达 LSP 出节点后，通过 Engress 出节点将该报文返回给发送者，这样可以避免中间节点出现超时问题的情况。
+
+
+

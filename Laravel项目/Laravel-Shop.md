@@ -76,6 +76,12 @@ npm config list -g
 ```
 ##### yarn
 
+> 安装 yarn
+
+~~~bash
+npm install --global yarn
+~~~
+
 > yarn 配置安装加速
 
 ~~~
